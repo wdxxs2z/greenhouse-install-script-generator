@@ -11,6 +11,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"github.com/onsi/gomega/ghttp"
 	"github.com/pivotal-cf/create-install-bat/models"
@@ -21,13 +22,17 @@ var _ = Describe("Generate", func() {
 	var session *gexec.Session
 	var outputDir string
 	var manifest string
+	var generateCommand *exec.Cmd
+	var generatePath string
 
-	JustBeforeEach(func() {
+	BeforeEach(func() {
 		server = ghttp.NewServer()
 		var err error
-		outputDir, err = ioutil.TempDir("", "XXXXXXX")
+		generatePath, err = gexec.Build("github.com/pivotal-cf/create-install-bat/cmd")
 		Expect(err).NotTo(HaveOccurred())
+	})
 
+	JustBeforeEach(func() {
 		deployments := []models.IndexDeployment{
 			{
 				Name: "cf-warden",
@@ -70,13 +75,8 @@ var _ = Describe("Generate", func() {
 			),
 		)
 
-		generatePath, err := gexec.Build("github.com/pivotal-cf/create-install-bat/cmd")
-		Expect(err).NotTo(HaveOccurred())
-
-		generateCommand := exec.Command(generatePath, server.URL(), outputDir)
 		session, err = gexec.Start(generateCommand, GinkgoWriter, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(session).Should(gexec.Exit(0))
 	})
 
 	BeforeEach(func() {
@@ -87,54 +87,78 @@ var _ = Describe("Generate", func() {
 		Expect(os.RemoveAll(outputDir)).To(Succeed())
 	})
 
-	It("sends get requests to get the deployments", func() {
-		Expect(server.ReceivedRequests()).To(HaveLen(2))
+	Context("when ran without params", func() {
+		BeforeEach(func() {
+			generateCommand = exec.Command(generatePath)
+		})
+
+		It("prints an error message", func() {
+			Eventually(session).Should(gexec.Exit(1))
+			Expect(session.Err).Should(gbytes.Say("missing required parameters"))
+		})
 	})
 
-	It("sends basic auth information", func() {
-		for _, req := range server.ReceivedRequests() {
-			auth := req.Header.Get("Authorization")
-			Expect(auth).To(HavePrefix("Basic "))
-			tokens := strings.Split(auth, " ")
-			Expect(tokens).To(HaveLen(2))
-			credentials, err := base64.StdEncoding.DecodeString(tokens[1])
+	Context("when all required params are given", func() {
+		BeforeEach(func() {
+			var err error
+			outputDir, err = ioutil.TempDir("", "XXXXXXX")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(credentials).To(BeEquivalentTo("admin:admin"))
-		}
-	})
 
-	Context("when one deployment is returned with CF+diego", func() {
-		It("generates the certificate authority cert", func() {
-			cert, err := ioutil.ReadFile(path.Join(outputDir, "ca.crt"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cert).To(BeEquivalentTo("CA_CERT"))
+			generateCommand = exec.Command(generatePath, server.URL(), outputDir)
 		})
 
-		It("generates the client cert", func() {
-			cert, err := ioutil.ReadFile(path.Join(outputDir, "client.crt"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cert).To(BeEquivalentTo("CLIENT_CERT"))
+		JustBeforeEach(func() {
+			Eventually(session).Should(gexec.Exit(0))
 		})
 
-		It("generates the client key", func() {
-			cert, err := ioutil.ReadFile(path.Join(outputDir, "client.key"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cert).To(BeEquivalentTo("CLIENT_KEY"))
+		It("sends get requests to get the deployments", func() {
+			Expect(server.ReceivedRequests()).To(HaveLen(2))
 		})
 
-		Describe("the lines of the batch script", func() {
-			var lines []string
-			var script string
-
-			JustBeforeEach(func() {
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+		It("sends basic auth information", func() {
+			for _, req := range server.ReceivedRequests() {
+				auth := req.Header.Get("Authorization")
+				Expect(auth).To(HavePrefix("Basic "))
+				tokens := strings.Split(auth, " ")
+				Expect(tokens).To(HaveLen(2))
+				credentials, err := base64.StdEncoding.DecodeString(tokens[1])
 				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
-				lines = strings.Split(string(script), "\r\n")
+				Expect(credentials).To(BeEquivalentTo("admin:admin"))
+			}
+		})
+
+		Context("when one deployment is returned with CF+diego", func() {
+			It("generates the certificate authority cert", func() {
+				cert, err := ioutil.ReadFile(path.Join(outputDir, "ca.crt"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cert).To(BeEquivalentTo("CA_CERT"))
 			})
 
-			It("contains all the MSI parameters", func() {
-				expectedContent := `msiexec /norestart /i diego.msi ^
+			It("generates the client cert", func() {
+				cert, err := ioutil.ReadFile(path.Join(outputDir, "client.crt"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cert).To(BeEquivalentTo("CLIENT_CERT"))
+			})
+
+			It("generates the client key", func() {
+				cert, err := ioutil.ReadFile(path.Join(outputDir, "client.key"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cert).To(BeEquivalentTo("CLIENT_KEY"))
+			})
+
+			Describe("the lines of the batch script", func() {
+				var lines []string
+				var script string
+
+				JustBeforeEach(func() {
+					content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+					Expect(err).NotTo(HaveOccurred())
+					script = strings.TrimSpace(string(content))
+					lines = strings.Split(string(script), "\r\n")
+				})
+
+				It("contains all the MSI parameters", func() {
+					expectedContent := `msiexec /norestart /i diego.msi ^
   ADMIN_USERNAME=[USERNAME] ^
   ADMIN_PASSWORD=[PASSWORD] ^
   CONSUL_IPS=consul1.foo.bar ^
@@ -145,30 +169,31 @@ var _ = Describe("Generate", func() {
   ETCD_CA_FILE=%cd%\ca.crt ^
   ETCD_CERT_FILE=%cd%\client.crt ^
   ETCD_KEY_FILE=%cd%\client.key`
-				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
-				Expect(script).To(Equal(expectedContent))
+					expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+					Expect(script).To(Equal(expectedContent))
+				})
 			})
-		})
 
-		Context("when there is one redundancy zone", func() {
-			It("generates only one file", func() {
-				matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(matches).To(HaveLen(1))
-				Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
+			Context("when there is one redundancy zone", func() {
+				It("generates only one file", func() {
+					matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(matches).To(HaveLen(1))
+					Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
+				})
 			})
-		})
 
-		Context("when there is more than one redundancy zone", func() {
-			BeforeEach(func() {
-				manifest = "two_zone_manifest.yml"
-			})
-			It("generates one file per zone", func() {
-				matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(matches).To(HaveLen(2))
-				Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
-				Expect(path.Join(outputDir, "install_zone2.bat")).To(BeAnExistingFile())
+			Context("when there is more than one redundancy zone", func() {
+				BeforeEach(func() {
+					manifest = "two_zone_manifest.yml"
+				})
+				It("generates one file per zone", func() {
+					matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(matches).To(HaveLen(2))
+					Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
+					Expect(path.Join(outputDir, "install_zone2.bat")).To(BeAnExistingFile())
+				})
 			})
 		})
 	})

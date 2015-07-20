@@ -32,6 +32,14 @@ const (
 )
 
 func main() {
+	if len(os.Args) != 3 {
+		fmt.Fprintf(os.Stderr,
+			`missing required parameters. Usage: %s bosh-director-url output-dir
+
+e.g. %s http://bosh.foo.bar.com /tmp/scripts\n`, os.Args[0], os.Args[0])
+		os.Exit(1)
+	}
+
 	boshServerUrl := os.Args[1]
 	outputDir := os.Args[2]
 	response := NewBoshRequest(boshServerUrl + "/deployments")
