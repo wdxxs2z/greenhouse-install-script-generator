@@ -1,0 +1,23 @@
+properties:
+  consul:
+    agent:
+      servers:
+        lan:
+          - consul1.foo.bar
+  etcd:
+    machines:
+      - etcd1.foo.bar
+  loggregator_endpoint:
+    shared_secret: secret123
+  diego:
+    etcd:
+      ca_cert: CA_CERT
+      client_cert: CLIENT_CERT
+      client_key: CLIENT_KEY
+
+jobs:
+  - properties:
+      diego:
+        rep:
+          zone:
+            zone1
