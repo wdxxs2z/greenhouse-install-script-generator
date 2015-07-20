@@ -13,21 +13,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
 	"github.com/onsi/gomega/ghttp"
+	"github.com/pivotal-cf/create-install-bat/models"
 )
-
-type Release struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
-type IndexDeployment struct {
-	Name     string    `json:"name"`
-	Releases []Release `json:"releases"`
-}
-
-type ShowDeployment struct {
-	Manifest string `json:"manifest"`
-}
 
 var _ = Describe("Generate", func() {
 	var server *ghttp.Server
@@ -41,10 +28,10 @@ var _ = Describe("Generate", func() {
 		outputDir, err = ioutil.TempDir("", "XXXXXXX")
 		Expect(err).NotTo(HaveOccurred())
 
-		deployments := []IndexDeployment{
+		deployments := []models.IndexDeployment{
 			{
 				Name: "cf-warden",
-				Releases: []Release{
+				Releases: []models.Release{
 					{
 						Name:    "cf",
 						Version: "213+dev.2",
@@ -53,7 +40,7 @@ var _ = Describe("Generate", func() {
 			},
 			{
 				Name: "cf-warden-diego",
-				Releases: []Release{
+				Releases: []models.Release{
 					{
 						Name:    "cf",
 						Version: "213+dev.2",
@@ -68,7 +55,7 @@ var _ = Describe("Generate", func() {
 
 		yaml, err := ioutil.ReadFile(manifest)
 		Expect(err).ToNot(HaveOccurred())
-		diegoDeployment := ShowDeployment{
+		diegoDeployment := models.ShowDeployment{
 			Manifest: string(yaml),
 		}
 
@@ -83,8 +70,11 @@ var _ = Describe("Generate", func() {
 			),
 		)
 
-		command := exec.Command("../install-bat.rb", server.URL(), outputDir)
-		session, err = gexec.Start(command, GinkgoWriter, GinkgoWriter)
+		generatePath, err := gexec.Build("github.com/pivotal-cf/create-install-bat/cmd")
+		Expect(err).NotTo(HaveOccurred())
+
+		generateCommand := exec.Command(generatePath, server.URL(), outputDir)
+		session, err = gexec.Start(generateCommand, GinkgoWriter, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(session).Should(gexec.Exit(0))
 	})
@@ -102,13 +92,15 @@ var _ = Describe("Generate", func() {
 	})
 
 	It("sends basic auth information", func() {
-		auth := server.ReceivedRequests()[0].Header.Get("Authorization")
-		Expect(auth).To(HavePrefix("Basic "))
-		tokens := strings.Split(auth, " ")
-		Expect(tokens).To(HaveLen(2))
-		credentials, err := base64.StdEncoding.DecodeString(tokens[1])
-		Expect(err).NotTo(HaveOccurred())
-		Expect(credentials).To(BeEquivalentTo("admin:admin"))
+		for _, req := range server.ReceivedRequests() {
+			auth := req.Header.Get("Authorization")
+			Expect(auth).To(HavePrefix("Basic "))
+			tokens := strings.Split(auth, " ")
+			Expect(tokens).To(HaveLen(2))
+			credentials, err := base64.StdEncoding.DecodeString(tokens[1])
+			Expect(err).NotTo(HaveOccurred())
+			Expect(credentials).To(BeEquivalentTo("admin:admin"))
+		}
 	})
 
 	Context("when one deployment is returned with CF+diego", func() {
