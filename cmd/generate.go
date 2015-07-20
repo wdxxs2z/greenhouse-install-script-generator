@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -150,6 +151,9 @@ func NewBoshRequest(endpoint string) *http.Response {
 		log.Fatal(err)
 	}
 	request.SetBasicAuth("admin", "admin")
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
+		InsecureSkipVerify: true,
+	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		log.Fatal(err)
