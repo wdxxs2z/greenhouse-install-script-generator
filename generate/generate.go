@@ -150,7 +150,7 @@ func NewBoshRequest(endpoint string) *http.Response {
 	if err != nil {
 		log.Fatal(err)
 	}
-	request.SetBasicAuth("admin", "admin")
+
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: true,
 	}

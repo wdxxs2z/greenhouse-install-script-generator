@@ -7,9 +7,16 @@ Installation
 1. `git clone https://github.com/pivotal-cf/greenhouse-install-script-generator $GOPATH/src/github.com/pivotal-cf/greenhouse-install-script-generator`
 1. `cd $GOPATH/src/github.com/pivotal-cf/greenhouse-install-script-generator &&
    godep restore`
-1. `go run ./generate/generate.go BOSH_URL OUTPUT_DIR`
 
 
 Tests
 -------------------
 - `ginkgo -r`
+
+Usage
+-----
+
+`go run ./generate/generate.go BOSH_URL OUTPUT_DIR`
+
+Sample for BOSH Lite:
+`go run ./generate/generate.go https://admin:admin@192.168.50.4:25555 /tmp`
