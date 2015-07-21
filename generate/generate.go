@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	installBatTemplate = `msiexec /norestart /i diego.msi ^
+	installBatTemplate = `msiexec /norestart /i %~dp0\diego.msi ^
   ADMIN_USERNAME={{.Username}} ^
   ADMIN_PASSWORD={{.Password}} ^
   CONSUL_IPS={{.ConsulIPs}} ^
