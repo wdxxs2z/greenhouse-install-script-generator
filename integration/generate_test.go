@@ -14,7 +14,7 @@ import (
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"github.com/onsi/gomega/ghttp"
-	"github.com/pivotal-cf/create-install-bat/models"
+	"github.com/pivotal-cf/greenhouse-install-script-generator/models"
 )
 
 var _ = Describe("Generate", func() {
@@ -28,7 +28,7 @@ var _ = Describe("Generate", func() {
 	BeforeEach(func() {
 		server = ghttp.NewServer()
 		var err error
-		generatePath, err = gexec.Build("github.com/pivotal-cf/create-install-bat/cmd")
+		generatePath, err = gexec.Build("github.com/pivotal-cf/greenhouse-install-script-generator/generate")
 		Expect(err).NotTo(HaveOccurred())
 	})
 
