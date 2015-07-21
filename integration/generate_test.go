@@ -158,9 +158,9 @@ var _ = Describe("Generate", func() {
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE=zone1 ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
-  ETCD_CA_FILE=%cd%\ca.crt ^
-  ETCD_CERT_FILE=%cd%\client.crt ^
-  ETCD_KEY_FILE=%cd%\client.key`
+  ETCD_CA_FILE=%~dp0\ca.crt ^
+  ETCD_CERT_FILE=%~dp0\client.crt ^
+  ETCD_KEY_FILE=%~dp0\client.key`
 					expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
 					Expect(script).To(Equal(expectedContent))
 				})

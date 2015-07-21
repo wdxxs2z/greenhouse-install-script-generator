@@ -27,9 +27,9 @@ const (
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE={{.Zone}} ^
   LOGGREGATOR_SHARED_SECRET={{.SharedSecret}} ^
-  ETCD_CA_FILE=%cd%\ca.crt ^
-  ETCD_CERT_FILE=%cd%\client.crt ^
-  ETCD_KEY_FILE=%cd%\client.key
+  ETCD_CA_FILE=%~dp0\ca.crt ^
+  ETCD_CERT_FILE=%~dp0\client.crt ^
+  ETCD_KEY_FILE=%~dp0\client.key
 `
 )
 
