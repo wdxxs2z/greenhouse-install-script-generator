@@ -1,3 +1,5 @@
+[![Build status](https://ci.appveyor.com/api/projects/status/cvmlu0yh9x3wdihd/branch/master?svg=true)](https://ci.appveyor.com/project/greenhouse/greenhouse-install-script-generator/branch/master)
+
 Installation
 ------------
 1. Install (godep)[https://github.com/tools/godep]
