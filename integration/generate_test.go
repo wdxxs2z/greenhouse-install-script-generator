@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"encoding/base64"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -113,18 +112,6 @@ var _ = Describe("Generate", func() {
 
 		It("sends get requests to get the deployments", func() {
 			Expect(server.ReceivedRequests()).To(HaveLen(2))
-		})
-
-		It("sends basic auth information", func() {
-			for _, req := range server.ReceivedRequests() {
-				auth := req.Header.Get("Authorization")
-				Expect(auth).To(HavePrefix("Basic "))
-				tokens := strings.Split(auth, " ")
-				Expect(tokens).To(HaveLen(2))
-				credentials, err := base64.StdEncoding.DecodeString(tokens[1])
-				Expect(err).NotTo(HaveOccurred())
-				Expect(credentials).To(BeEquivalentTo("admin:admin"))
-			}
 		})
 
 		Context("when one deployment is returned with CF+diego", func() {
