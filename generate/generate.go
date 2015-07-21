@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -19,8 +20,8 @@ import (
 
 const (
 	installBatTemplate = `msiexec /norestart /i diego.msi ^
-  ADMIN_USERNAME=[USERNAME] ^
-  ADMIN_PASSWORD=[PASSWORD] ^
+  ADMIN_USERNAME={{.Username}} ^
+  ADMIN_PASSWORD={{.Password}} ^
   CONSUL_IPS={{.ConsulIPs}} ^
   CF_ETCD_CLUSTER=http://{{.EtcdCluster}}:4001 ^
   STACK=windows2012R2 ^
@@ -32,24 +33,36 @@ const (
 `
 )
 
-func main() {
-	if len(os.Args) != 3 {
-		fmt.Fprintf(os.Stderr,
-			`missing required parameters. Usage: %s bosh-director-url output-dir
+type InstallerArguments struct {
+	ConsulIPs    string
+	EtcdCluster  string
+	Zone         string
+	SharedSecret string
+	Username     string
+	Password     string
+}
 
-e.g. %s http://bosh.foo.bar.com /tmp/scripts\n`, os.Args[0], os.Args[0])
+func main() {
+	boshServerUrl := flag.String("boshUrl", "", "Bosh URL (https://admin:admin@bosh.example:25555)")
+	outputDir := flag.String("outputDir", "", "Output directory (/tmp/scripts)")
+	windowsUsername := flag.String("windowsUsername", "", "Windows username")
+	windowsPassword := flag.String("windowsPassword", "", "Windows password")
+
+	flag.Parse()
+	if *boshServerUrl == "" || *outputDir == "" {
+		fmt.Fprintf(os.Stderr, "Usage of generate:\n")
+		flag.PrintDefaults()
 		os.Exit(1)
 	}
+	fmt.Println(*windowsUsername, *windowsPassword)
 
-	boshServerUrl := os.Args[1]
-	outputDir := os.Args[2]
-	response := NewBoshRequest(boshServerUrl + "/deployments")
+	response := NewBoshRequest(*boshServerUrl + "/deployments")
 	defer response.Body.Close()
 	deployments := []models.IndexDeployment{}
 	json.NewDecoder(response.Body).Decode(&deployments)
 	idx := GetDiegoDeployment(deployments)
 
-	response = NewBoshRequest(boshServerUrl + "/deployments/" + deployments[idx].Name)
+	response = NewBoshRequest(*boshServerUrl + "/deployments/" + deployments[idx].Name)
 	defer response.Body.Close()
 	deployment := models.ShowDeployment{}
 	json.NewDecoder(response.Body).Decode(&deployment)
@@ -62,7 +75,7 @@ e.g. %s http://bosh.foo.bar.com /tmp/scripts\n`, os.Args[0], os.Args[0])
 		"client_key":  "client.key",
 		"ca_cert":     "ca.crt",
 	} {
-		extractCert(manifest, outputDir, k, f)
+		extractCert(manifest, *outputDir, k, f)
 	}
 
 	zones := map[string]struct{}{}
@@ -84,37 +97,34 @@ e.g. %s http://bosh.foo.bar.com /tmp/scripts\n`, os.Args[0], os.Args[0])
 	etcdCluster := GetIn(manifest, "properties", "etcd", "machines", 0).(string)
 	sharedSecret := GetIn(manifest, "properties", "loggregator_endpoint", "shared_secret").(string)
 
+	args := InstallerArguments{
+		ConsulIPs:    joinedConsulIPs,
+		EtcdCluster:  etcdCluster,
+		SharedSecret: sharedSecret,
+		Username:     *windowsUsername,
+		Password:     *windowsPassword,
+	}
 	for zone, _ := range zones {
-		generateInstallScript(outputDir, zone, joinedConsulIPs, etcdCluster, sharedSecret)
+		args.Zone = zone
+		generateInstallScript(*outputDir, args)
 	}
 }
 
-func generateInstallScript(outputDir, zone, consulIPs, etcdCluster, sharedSecret string) {
+func generateInstallScript(outputDir string, args InstallerArguments) {
 	content := strings.Replace(installBatTemplate, "\n", "\r\n", -1)
 	temp, err := template.New("").Parse(content)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	filename := fmt.Sprintf("install_%s.bat", zone)
+	filename := fmt.Sprintf("install_%s.bat", args.Zone)
 	f, err := os.OpenFile(path.Join(outputDir, filename), os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer f.Close()
 
-	data := struct {
-		ConsulIPs    string
-		EtcdCluster  string
-		Zone         string
-		SharedSecret string
-	}{
-		ConsulIPs:    consulIPs,
-		EtcdCluster:  etcdCluster,
-		Zone:         zone,
-		SharedSecret: sharedSecret,
-	}
-	err = temp.Execute(f, data)
+	err = temp.Execute(f, args)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -93,7 +93,7 @@ var _ = Describe("Generate", func() {
 
 		It("prints an error message", func() {
 			Eventually(session).Should(gexec.Exit(1))
-			Expect(session.Err).Should(gbytes.Say("missing required parameters"))
+			Expect(session.Err).Should(gbytes.Say("Usage of generate:"))
 		})
 	})
 
@@ -103,7 +103,12 @@ var _ = Describe("Generate", func() {
 			outputDir, err = ioutil.TempDir("", "XXXXXXX")
 			Expect(err).NotTo(HaveOccurred())
 
-			generateCommand = exec.Command(generatePath, server.URL(), outputDir)
+			generateCommand = exec.Command(generatePath,
+				"-boshUrl", server.URL(),
+				"-outputDir", outputDir,
+				"-windowsUsername", "admin",
+				"-windowsPassword", "password",
+			)
 		})
 
 		JustBeforeEach(func() {
@@ -146,8 +151,8 @@ var _ = Describe("Generate", func() {
 
 				It("contains all the MSI parameters", func() {
 					expectedContent := `msiexec /norestart /i diego.msi ^
-  ADMIN_USERNAME=[USERNAME] ^
-  ADMIN_PASSWORD=[PASSWORD] ^
+  ADMIN_USERNAME=admin ^
+  ADMIN_PASSWORD=password ^
   CONSUL_IPS=consul1.foo.bar ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
