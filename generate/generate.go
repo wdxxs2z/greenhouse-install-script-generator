@@ -58,6 +58,19 @@ func main() {
 
 	response := NewBoshRequest(*boshServerUrl + "/deployments")
 	defer response.Body.Close()
+	
+	if (response.StatusCode != http.StatusOK) {
+		buf := new(bytes.Buffer)
+		_, err := buf.ReadFrom(response.Body)
+		if err != nil {
+			fmt.Printf("Could not read response from BOSH director.")
+			os.Exit(1)
+		}
+		
+		fmt.Fprintf(os.Stderr, "Unexpected BOSH director response: %v, %v", response.StatusCode, buf.String())
+		os.Exit(1)
+	}
+	
 	deployments := []models.IndexDeployment{}
 	json.NewDecoder(response.Body).Decode(&deployments)
 	idx := GetDiegoDeployment(deployments)
@@ -65,10 +78,6 @@ func main() {
 	response = NewBoshRequest(*boshServerUrl + "/deployments/" + deployments[idx].Name)
 	defer response.Body.Close()
 	
-		fmt.Fprintf(os.Stderr, "Unexpected BOSH director response: %v, %v", response.StatusCode, response.Body)
-	if (response.StatusCode != http.StatusOK) {
-		fmt.Fprintf(os.Stderr, "Unexpected BOSH director response: %v, %v", response.StatusCode, response.Body)
-	} 
 	deployment := models.ShowDeployment{}
 	json.NewDecoder(response.Body).Decode(&deployment)
 	buf := bytes.NewBufferString(deployment.Manifest)

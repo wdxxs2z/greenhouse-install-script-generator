@@ -39,7 +39,7 @@ func CreateServer(manifest string) *ghttp.Server {
 	return server
 }
 
-func Create403Server() *ghttp.Server {
+func Create401Server() *ghttp.Server {
 	server := ghttp.NewServer()
 	server.AppendHandlers(
 		ghttp.CombineHandlers(
@@ -51,7 +51,7 @@ func Create403Server() *ghttp.Server {
 	return server
 }
 
-func StartProcess(generatePath string, server *ghttp.Server) *gexec.Session {
+func StartProcess(generatePath string, server *ghttp.Server) (*gexec.Session, string) {
 	var err error
 	outputDir, err := ioutil.TempDir("", "XXXXXXX")
 	Expect(err).NotTo(HaveOccurred())
@@ -61,7 +61,7 @@ func StartProcess(generatePath string, server *ghttp.Server) *gexec.Session {
 		"-outputDir", outputDir,
 		"-windowsUsername", "admin",
 		"-windowsPassword", "password",
-	))
+	)), outputDir
 }
 
 func StartCommand(command *exec.Cmd) *gexec.Session {
@@ -129,8 +129,9 @@ var _ = Describe("Generate", func() {
 
 			BeforeEach(func() {
 				server = CreateServer("one_zone_manifest.yml")
-				session := StartProcess(generatePath, server)
-				Eventually(session).Should(gexec.Exit(0))
+				var session *gexec.Session
+				session, outputDir = StartProcess(generatePath, server)
+				Eventually(session).Should(gexec.Exit(-1))
 			})
 			It("sends get requests to get the deployments", func() {
 				Expect(server.ReceivedRequests()).To(HaveLen(2))
@@ -160,32 +161,33 @@ var _ = Describe("Generate", func() {
 				Expect(matches).To(HaveLen(1))
 				Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
 			})
-		})
-		Describe("the lines of the batch script", func() {
-			var lines []string
-			var script string
 
-			JustBeforeEach(func() {
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
-				lines = strings.Split(string(script), "\r\n")
-			})
+			Describe("the lines of the batch script", func() {
+				var lines []string
+				var script string
 
-			It("contains all the MSI parameters", func() {
-				expectedContent := `msiexec /norestart /i %~dp0\diego.msi ^
-			ADMIN_USERNAME=admin ^
-			ADMIN_PASSWORD=password ^
-			CONSUL_IPS=consul1.foo.bar ^
-			CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
-			STACK=windows2012R2 ^
-			REDUNDANCY_ZONE=zone1 ^
-			LOGGREGATOR_SHARED_SECRET=secret123 ^
-			ETCD_CA_FILE=%~dp0\ca.crt ^
-			ETCD_CERT_FILE=%~dp0\client.crt ^
-			ETCD_KEY_FILE=%~dp0\client.key`
-				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
-				Expect(script).To(Equal(expectedContent))
+				BeforeEach(func() {
+					content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+					Expect(err).NotTo(HaveOccurred())
+					script = strings.TrimSpace(string(content))
+					lines = strings.Split(string(script), "\r\n")
+				})
+
+				It("contains all the MSI parameters", func() {
+					expectedContent := `msiexec /norestart /i %~dp0\diego.msi ^
+  ADMIN_USERNAME=admin ^
+  ADMIN_PASSWORD=password ^
+  CONSUL_IPS=consul1.foo.bar ^
+  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
+  STACK=windows2012R2 ^
+  REDUNDANCY_ZONE=zone1 ^
+  LOGGREGATOR_SHARED_SECRET=secret123 ^
+  ETCD_CA_FILE=%~dp0\ca.crt ^
+  ETCD_CERT_FILE=%~dp0\client.crt ^
+  ETCD_KEY_FILE=%~dp0\client.key`
+					expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+					Expect(script).To(Equal(expectedContent))
+				})
 			})
 		})
 
@@ -194,7 +196,8 @@ var _ = Describe("Generate", func() {
 
 			BeforeEach(func() {
 				server = CreateServer("two_zone_manifest.yml")
-				session := StartProcess(generatePath, server)
+				var session *gexec.Session
+				session, outputDir = StartProcess(generatePath, server)
 				Eventually(session).Should(gexec.Exit(0))
 			})
 
@@ -212,13 +215,12 @@ var _ = Describe("Generate", func() {
 			var session *gexec.Session
 
 			BeforeEach(func() {
-				server = Create403Server()
-				session = StartProcess(generatePath, server)
+				server = Create401Server()
+				session, outputDir = StartProcess(generatePath, server)
 				Eventually(session).Should(gexec.Exit(1))
 			})
 
 			It("displays the reponse error to the user", func() {
-				//		Eventually(session).Should(gexec.Exit(1))
 				Expect(session.Err).Should(gbytes.Say("Not authorized"))
 			})
 		})
