@@ -39,6 +39,31 @@ func CreateServer(manifest string) *ghttp.Server {
 	return server
 }
 
+func Create403Server() *ghttp.Server {
+	server := ghttp.NewServer()
+	server.AppendHandlers(
+		ghttp.CombineHandlers(
+			ghttp.VerifyRequest("GET", "/deployments"),
+			ghttp.RespondWith(401, "Not authorized"),
+		),
+	)
+
+	return server
+}
+
+func StartProcess(generatePath string, server *ghttp.Server) *gexec.Session {
+	var err error
+	outputDir, err := ioutil.TempDir("", "XXXXXXX")
+	Expect(err).NotTo(HaveOccurred())
+
+	return StartCommand(exec.Command(generatePath,
+		"-boshUrl", server.URL(),
+		"-outputDir", outputDir,
+		"-windowsUsername", "admin",
+		"-windowsPassword", "password",
+	))
+}
+
 func StartCommand(command *exec.Cmd) *gexec.Session {
 	session, err := gexec.Start(command, GinkgoWriter, GinkgoWriter)
 	Expect(err).NotTo(HaveOccurred())
@@ -98,28 +123,19 @@ var _ = Describe("Generate", func() {
 	})
 
 	Context("when all required params are given", func() {
-		var server *ghttp.Server
 
-		BeforeEach(func() {
-			var err error
-			outputDir, err = ioutil.TempDir("", "XXXXXXX")
-			Expect(err).NotTo(HaveOccurred())
+		Context("when the server returns a one zone manifest", func() {
+			var server *ghttp.Server
 
-			server = CreateServer("one_zone_manifest.yml")
-			session := StartCommand(exec.Command(generatePath,
-				"-boshUrl", server.URL(),
-				"-outputDir", outputDir,
-				"-windowsUsername", "admin",
-				"-windowsPassword", "password",
-			))
-			Eventually(session).Should(gexec.Exit(0))
-		})
+			BeforeEach(func() {
+				server = CreateServer("one_zone_manifest.yml")
+				session := StartProcess(generatePath, server)
+				Eventually(session).Should(gexec.Exit(0))
+			})
+			It("sends get requests to get the deployments", func() {
+				Expect(server.ReceivedRequests()).To(HaveLen(2))
+			})
 
-		It("sends get requests to get the deployments", func() {
-			Expect(server.ReceivedRequests()).To(HaveLen(2))
-		})
-
-		Context("when one deployment is returned with CF+diego", func() {
 			It("generates the certificate authority cert", func() {
 				cert, err := ioutil.ReadFile(path.Join(outputDir, "ca.crt"))
 				Expect(err).NotTo(HaveOccurred())
@@ -138,55 +154,47 @@ var _ = Describe("Generate", func() {
 				Expect(cert).To(BeEquivalentTo("CLIENT_KEY"))
 			})
 
-			Describe("the lines of the batch script", func() {
-				var lines []string
-				var script string
+			It("generates only one file", func() {
+				matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(matches).To(HaveLen(1))
+				Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
+			})
+		})
+		Describe("the lines of the batch script", func() {
+			var lines []string
+			var script string
 
-				JustBeforeEach(func() {
-					content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
-					Expect(err).NotTo(HaveOccurred())
-					script = strings.TrimSpace(string(content))
-					lines = strings.Split(string(script), "\r\n")
-				})
-
-				It("contains all the MSI parameters", func() {
-					expectedContent := `msiexec /norestart /i %~dp0\diego.msi ^
-  ADMIN_USERNAME=admin ^
-  ADMIN_PASSWORD=password ^
-  CONSUL_IPS=consul1.foo.bar ^
-  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
-  STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=zone1 ^
-  LOGGREGATOR_SHARED_SECRET=secret123 ^
-  ETCD_CA_FILE=%~dp0\ca.crt ^
-  ETCD_CERT_FILE=%~dp0\client.crt ^
-  ETCD_KEY_FILE=%~dp0\client.key`
-					expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
-					Expect(script).To(Equal(expectedContent))
-				})
+			JustBeforeEach(func() {
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
+				lines = strings.Split(string(script), "\r\n")
 			})
 
-			Context("when there is one redundancy zone", func() {
-				It("generates only one file", func() {
-					matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
-					Expect(err).NotTo(HaveOccurred())
-					Expect(matches).To(HaveLen(1))
-					Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
-				})
+			It("contains all the MSI parameters", func() {
+				expectedContent := `msiexec /norestart /i %~dp0\diego.msi ^
+			ADMIN_USERNAME=admin ^
+			ADMIN_PASSWORD=password ^
+			CONSUL_IPS=consul1.foo.bar ^
+			CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
+			STACK=windows2012R2 ^
+			REDUNDANCY_ZONE=zone1 ^
+			LOGGREGATOR_SHARED_SECRET=secret123 ^
+			ETCD_CA_FILE=%~dp0\ca.crt ^
+			ETCD_CERT_FILE=%~dp0\client.crt ^
+			ETCD_KEY_FILE=%~dp0\client.key`
+				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+				Expect(script).To(Equal(expectedContent))
 			})
 		})
 
-		Context("when there is more than one redundancy zone", func() {
+		Context("when the server returns a two zone manifest", func() {
+			var server *ghttp.Server
+
 			BeforeEach(func() {
-				server := CreateServer("two_zone_manifest.yml")
-
-				session := StartCommand(exec.Command(generatePath,
-					"-boshUrl", server.URL(),
-					"-outputDir", outputDir,
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-				))
-
+				server = CreateServer("two_zone_manifest.yml")
+				session := StartProcess(generatePath, server)
 				Eventually(session).Should(gexec.Exit(0))
 			})
 
@@ -198,5 +206,22 @@ var _ = Describe("Generate", func() {
 				Expect(path.Join(outputDir, "install_zone2.bat")).To(BeAnExistingFile())
 			})
 		})
+
+		Context("when the server returns an unauthorized error", func() {
+			var server *ghttp.Server
+			var session *gexec.Session
+
+			BeforeEach(func() {
+				server = Create403Server()
+				session = StartProcess(generatePath, server)
+				Eventually(session).Should(gexec.Exit(1))
+			})
+
+			It("displays the reponse error to the user", func() {
+				//		Eventually(session).Should(gexec.Exit(1))
+				Expect(session.Err).Should(gbytes.Say("Not authorized"))
+			})
+		})
 	})
+
 })

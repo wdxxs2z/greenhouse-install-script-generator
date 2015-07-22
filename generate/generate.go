@@ -64,6 +64,11 @@ func main() {
 
 	response = NewBoshRequest(*boshServerUrl + "/deployments/" + deployments[idx].Name)
 	defer response.Body.Close()
+	
+		fmt.Fprintf(os.Stderr, "Unexpected BOSH director response: %v, %v", response.StatusCode, response.Body)
+	if (response.StatusCode != http.StatusOK) {
+		fmt.Fprintf(os.Stderr, "Unexpected BOSH director response: %v, %v", response.StatusCode, response.Body)
+	} 
 	deployment := models.ShowDeployment{}
 	json.NewDecoder(response.Body).Decode(&deployment)
 	buf := bytes.NewBufferString(deployment.Manifest)
