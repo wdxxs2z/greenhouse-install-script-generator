@@ -16,14 +16,14 @@ import (
 	"github.com/pivotal-cf/greenhouse-install-script-generator/models"
 )
 
-func CreateServer(manifest string) *ghttp.Server {
+func CreateServer(manifest string, deployments []models.IndexDeployment) *ghttp.Server {
 	yaml, err := ioutil.ReadFile(manifest)
 	Expect(err).ToNot(HaveOccurred())
 
 	diegoDeployment := models.ShowDeployment{
 		Manifest: string(yaml),
 	}
-	deployments := DefaultIndexDeployment()
+
 	server := ghttp.NewServer()
 	server.AppendHandlers(
 		ghttp.CombineHandlers(
@@ -37,6 +37,31 @@ func CreateServer(manifest string) *ghttp.Server {
 	)
 
 	return server
+}
+
+func Create401Server() *ghttp.Server {
+	server := ghttp.NewServer()
+	server.AppendHandlers(
+		ghttp.CombineHandlers(
+			ghttp.VerifyRequest("GET", "/deployments"),
+			ghttp.RespondWith(401, "Not authorized"),
+		),
+	)
+
+	return server
+}
+
+func StartProcess(generatePath string, serverUrl string) (*gexec.Session, string) {
+	var err error
+	outputDir, err := ioutil.TempDir("", "XXXXXXX")
+	Expect(err).NotTo(HaveOccurred())
+
+	return StartCommand(exec.Command(generatePath,
+		"-boshUrl", serverUrl,
+		"-outputDir", outputDir,
+		"-windowsUsername", "admin",
+		"-windowsPassword", "password",
+	)), outputDir
 }
 
 func StartCommand(command *exec.Cmd) *gexec.Session {
@@ -57,6 +82,46 @@ func DefaultIndexDeployment() []models.IndexDeployment {
 		},
 		{
 			Name: "cf-warden-diego",
+			Releases: []models.Release{
+				{
+					Name:    "cf",
+					Version: "213+dev.2",
+				},
+				{
+					Name:    "diego",
+					Version: "0.1366.0+dev.2",
+				},
+			},
+		},
+	}
+}
+
+func AmbiguousIndexDeployment() []models.IndexDeployment {
+	return []models.IndexDeployment{
+		{
+			Name: "cf-warden",
+			Releases: []models.Release{
+				{
+					Name:    "cf",
+					Version: "213+dev.2",
+				},
+			},
+		},
+		{
+			Name: "cf-warden-diego",
+			Releases: []models.Release{
+				{
+					Name:    "cf",
+					Version: "213+dev.2",
+				},
+				{
+					Name:    "diego",
+					Version: "0.1366.0+dev.2",
+				},
+			},
+		},
+		{
+			Name: "cf-warden-diego-2",
 			Releases: []models.Release{
 				{
 					Name:    "cf",
@@ -98,28 +163,20 @@ var _ = Describe("Generate", func() {
 	})
 
 	Context("when all required params are given", func() {
-		var server *ghttp.Server
 
-		BeforeEach(func() {
-			var err error
-			outputDir, err = ioutil.TempDir("", "XXXXXXX")
-			Expect(err).NotTo(HaveOccurred())
+		Context("when the server returns a one zone manifest", func() {
+			var server *ghttp.Server
 
-			server = CreateServer("one_zone_manifest.yml")
-			session := StartCommand(exec.Command(generatePath,
-				"-boshUrl", server.URL(),
-				"-outputDir", outputDir,
-				"-windowsUsername", "admin",
-				"-windowsPassword", "password",
-			))
-			Eventually(session).Should(gexec.Exit(0))
-		})
+			BeforeEach(func() {
+				server = CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
+				var session *gexec.Session
+				session, outputDir = StartProcess(generatePath, server.URL())
+				Eventually(session).Should(gexec.Exit(-1))
+			})
+			It("sends get requests to get the deployments", func() {
+				Expect(server.ReceivedRequests()).To(HaveLen(2))
+			})
 
-		It("sends get requests to get the deployments", func() {
-			Expect(server.ReceivedRequests()).To(HaveLen(2))
-		})
-
-		Context("when one deployment is returned with CF+diego", func() {
 			It("generates the certificate authority cert", func() {
 				cert, err := ioutil.ReadFile(path.Join(outputDir, "ca.crt"))
 				Expect(err).NotTo(HaveOccurred())
@@ -138,11 +195,18 @@ var _ = Describe("Generate", func() {
 				Expect(cert).To(BeEquivalentTo("CLIENT_KEY"))
 			})
 
+			It("generates only one file", func() {
+				matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(matches).To(HaveLen(1))
+				Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
+			})
+
 			Describe("the lines of the batch script", func() {
 				var lines []string
 				var script string
 
-				JustBeforeEach(func() {
+				BeforeEach(func() {
 					content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
 					Expect(err).NotTo(HaveOccurred())
 					script = strings.TrimSpace(string(content))
@@ -165,28 +229,15 @@ var _ = Describe("Generate", func() {
 					Expect(script).To(Equal(expectedContent))
 				})
 			})
-
-			Context("when there is one redundancy zone", func() {
-				It("generates only one file", func() {
-					matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
-					Expect(err).NotTo(HaveOccurred())
-					Expect(matches).To(HaveLen(1))
-					Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
-				})
-			})
 		})
 
-		Context("when there is more than one redundancy zone", func() {
+		Context("when the server returns a two zone manifest", func() {
+			var server *ghttp.Server
+
 			BeforeEach(func() {
-				server := CreateServer("two_zone_manifest.yml")
-
-				session := StartCommand(exec.Command(generatePath,
-					"-boshUrl", server.URL(),
-					"-outputDir", outputDir,
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-				))
-
+				server = CreateServer("two_zone_manifest.yml", DefaultIndexDeployment())
+				var session *gexec.Session
+				session, outputDir = StartProcess(generatePath, server.URL())
 				Eventually(session).Should(gexec.Exit(0))
 			})
 
@@ -198,5 +249,50 @@ var _ = Describe("Generate", func() {
 				Expect(path.Join(outputDir, "install_zone2.bat")).To(BeAnExistingFile())
 			})
 		})
+
+		Context("when the server is not reachable", func() {
+			var session *gexec.Session
+
+			BeforeEach(func() {
+				session, outputDir = StartProcess(generatePath, "http://1.2.3.4:5555")
+				Eventually(session, "15s", "1s").Should(gexec.Exit(1))
+			})
+
+			It("displays the reponse error to the user", func() {
+				Expect(session.Err).Should(gbytes.Say("Unable to establish connection to BOSH Director"))
+			})
+		})
+
+		Context("when the server returns an unauthorized error", func() {
+			var server *ghttp.Server
+			var session *gexec.Session
+
+			BeforeEach(func() {
+				server = Create401Server()
+				session, outputDir = StartProcess(generatePath, server.URL())
+				Eventually(session).Should(gexec.Exit(1))
+			})
+
+			It("displays the reponse error to the user", func() {
+				Expect(session.Err).Should(gbytes.Say("Not authorized"))
+			})
+		})
+
+		Context("when the server returns an ambiguous number of deployments", func() {
+			var server *ghttp.Server
+			var session *gexec.Session
+
+			BeforeEach(func() {
+				server = CreateServer("one_zone_manifest.yml", AmbiguousIndexDeployment())
+				session, outputDir = StartProcess(generatePath, server.URL())
+				Eventually(session).Should(gexec.Exit(1))
+			})
+
+			It("displays the reponse error to the user", func() {
+				Expect(session.Err).Should(gbytes.Say("BOSH Director does not have exactly one deployment containing a cf and diego release."))
+			})
+		})
+
 	})
+
 })

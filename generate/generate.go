@@ -13,6 +13,7 @@ import (
 	"path"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/cloudfoundry-incubator/candiedyaml"
 	"github.com/pivotal-cf/greenhouse-install-script-generator/models"
@@ -54,16 +55,33 @@ func main() {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
-	fmt.Println(*windowsUsername, *windowsPassword)
 
 	response := NewBoshRequest(*boshServerUrl + "/deployments")
 	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		buf := new(bytes.Buffer)
+		_, err := buf.ReadFrom(response.Body)
+		if err != nil {
+			fmt.Printf("Could not read response from BOSH director.")
+			os.Exit(1)
+		}
+
+		fmt.Fprintf(os.Stderr, "Unexpected BOSH director response: %v, %v", response.StatusCode, buf.String())
+		os.Exit(1)
+	}
+
 	deployments := []models.IndexDeployment{}
 	json.NewDecoder(response.Body).Decode(&deployments)
 	idx := GetDiegoDeployment(deployments)
+	if idx == -1 {
+		fmt.Fprintf(os.Stderr, "BOSH Director does not have exactly one deployment containing a cf and diego release.")
+		os.Exit(1)
+	}
 
 	response = NewBoshRequest(*boshServerUrl + "/deployments/" + deployments[idx].Name)
 	defer response.Body.Close()
+
 	deployment := models.ShowDeployment{}
 	json.NewDecoder(response.Body).Decode(&deployment)
 	buf := bytes.NewBufferString(deployment.Manifest)
@@ -136,6 +154,8 @@ func extractCert(manifest interface{}, outputDir, key, filename string) {
 }
 
 func GetDiegoDeployment(deployments []models.IndexDeployment) int {
+	deploymentIndex := -1
+
 	for i, deployment := range deployments {
 		if len(deployment.Releases) != 2 {
 			continue
@@ -147,12 +167,16 @@ func GetDiegoDeployment(deployments []models.IndexDeployment) int {
 		}
 
 		if releases["cf"] && releases["diego"] {
-			return i
+			if deploymentIndex != -1 {
+				return -1
+			}
+
+			deploymentIndex = i
 		}
 
 	}
 
-	return -1
+	return deploymentIndex
 }
 
 func NewBoshRequest(endpoint string) *http.Response {
@@ -164,9 +188,11 @@ func NewBoshRequest(endpoint string) *http.Response {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: true,
 	}
+
+	http.DefaultClient.Timeout = 10 * time.Second
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("Unable to establish connection to BOSH Director.", err)
 	}
 	return response
 }
