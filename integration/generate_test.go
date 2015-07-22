@@ -16,70 +16,69 @@ import (
 	"github.com/pivotal-cf/greenhouse-install-script-generator/models"
 )
 
+func CreateServer(manifest string) *ghttp.Server {
+	yaml, err := ioutil.ReadFile(manifest)
+	Expect(err).ToNot(HaveOccurred())
+
+	diegoDeployment := models.ShowDeployment{
+		Manifest: string(yaml),
+	}
+	deployments := DefaultIndexDeployment()
+	server := ghttp.NewServer()
+	server.AppendHandlers(
+		ghttp.CombineHandlers(
+			ghttp.VerifyRequest("GET", "/deployments"),
+			ghttp.RespondWithJSONEncoded(200, deployments),
+		),
+		ghttp.CombineHandlers(
+			ghttp.VerifyRequest("GET", "/deployments/cf-warden-diego"),
+			ghttp.RespondWithJSONEncoded(200, diegoDeployment),
+		),
+	)
+
+	return server
+}
+
+func StartCommand(command *exec.Cmd) *gexec.Session {
+	session, err := gexec.Start(command, GinkgoWriter, GinkgoWriter)
+	Expect(err).NotTo(HaveOccurred())
+	return session
+}
+func DefaultIndexDeployment() []models.IndexDeployment {
+	return []models.IndexDeployment{
+		{
+			Name: "cf-warden",
+			Releases: []models.Release{
+				{
+					Name:    "cf",
+					Version: "213+dev.2",
+				},
+			},
+		},
+		{
+			Name: "cf-warden-diego",
+			Releases: []models.Release{
+				{
+					Name:    "cf",
+					Version: "213+dev.2",
+				},
+				{
+					Name:    "diego",
+					Version: "0.1366.0+dev.2",
+				},
+			},
+		},
+	}
+}
+
 var _ = Describe("Generate", func() {
-	var server *ghttp.Server
-	var session *gexec.Session
 	var outputDir string
-	var manifest string
-	var generateCommand *exec.Cmd
 	var generatePath string
 
 	BeforeEach(func() {
-		server = ghttp.NewServer()
 		var err error
 		generatePath, err = gexec.Build("github.com/pivotal-cf/greenhouse-install-script-generator/generate")
 		Expect(err).NotTo(HaveOccurred())
-	})
-
-	JustBeforeEach(func() {
-		deployments := []models.IndexDeployment{
-			{
-				Name: "cf-warden",
-				Releases: []models.Release{
-					{
-						Name:    "cf",
-						Version: "213+dev.2",
-					},
-				},
-			},
-			{
-				Name: "cf-warden-diego",
-				Releases: []models.Release{
-					{
-						Name:    "cf",
-						Version: "213+dev.2",
-					},
-					{
-						Name:    "diego",
-						Version: "0.1366.0+dev.2",
-					},
-				},
-			},
-		}
-
-		yaml, err := ioutil.ReadFile(manifest)
-		Expect(err).ToNot(HaveOccurred())
-		diegoDeployment := models.ShowDeployment{
-			Manifest: string(yaml),
-		}
-
-		server.AppendHandlers(
-			ghttp.CombineHandlers(
-				ghttp.VerifyRequest("GET", "/deployments"),
-				ghttp.RespondWithJSONEncoded(200, deployments),
-			),
-			ghttp.CombineHandlers(
-				ghttp.VerifyRequest("GET", "/deployments/cf-warden-diego"),
-				ghttp.RespondWithJSONEncoded(200, diegoDeployment),
-			),
-		)
-
-		session, err = gexec.Start(generateCommand, GinkgoWriter, GinkgoWriter)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	BeforeEach(func() {
-		manifest = "one_zone_manifest.yml"
 	})
 
 	AfterEach(func() {
@@ -87,8 +86,9 @@ var _ = Describe("Generate", func() {
 	})
 
 	Context("when ran without params", func() {
+		var session *gexec.Session
 		BeforeEach(func() {
-			generateCommand = exec.Command(generatePath)
+			session = StartCommand(exec.Command(generatePath))
 		})
 
 		It("prints an error message", func() {
@@ -98,20 +98,20 @@ var _ = Describe("Generate", func() {
 	})
 
 	Context("when all required params are given", func() {
+		var server *ghttp.Server
+
 		BeforeEach(func() {
 			var err error
 			outputDir, err = ioutil.TempDir("", "XXXXXXX")
 			Expect(err).NotTo(HaveOccurred())
 
-			generateCommand = exec.Command(generatePath,
+			server = CreateServer("one_zone_manifest.yml")
+			session := StartCommand(exec.Command(generatePath,
 				"-boshUrl", server.URL(),
 				"-outputDir", outputDir,
 				"-windowsUsername", "admin",
 				"-windowsPassword", "password",
-			)
-		})
-
-		JustBeforeEach(func() {
+			))
 			Eventually(session).Should(gexec.Exit(0))
 		})
 
@@ -174,18 +174,28 @@ var _ = Describe("Generate", func() {
 					Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
 				})
 			})
+		})
 
-			Context("when there is more than one redundancy zone", func() {
-				BeforeEach(func() {
-					manifest = "two_zone_manifest.yml"
-				})
-				It("generates one file per zone", func() {
-					matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
-					Expect(err).NotTo(HaveOccurred())
-					Expect(matches).To(HaveLen(2))
-					Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
-					Expect(path.Join(outputDir, "install_zone2.bat")).To(BeAnExistingFile())
-				})
+		Context("when there is more than one redundancy zone", func() {
+			BeforeEach(func() {
+				server := CreateServer("two_zone_manifest.yml")
+
+				session := StartCommand(exec.Command(generatePath,
+					"-boshUrl", server.URL(),
+					"-outputDir", outputDir,
+					"-windowsUsername", "admin",
+					"-windowsPassword", "password",
+				))
+
+				Eventually(session).Should(gexec.Exit(0))
+			})
+
+			It("generates one file per zone", func() {
+				matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(matches).To(HaveLen(2))
+				Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
+				Expect(path.Join(outputDir, "install_zone2.bat")).To(BeAnExistingFile())
 			})
 		})
 	})
