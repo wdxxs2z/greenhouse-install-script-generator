@@ -157,10 +157,6 @@ func GetDiegoDeployment(deployments []models.IndexDeployment) int {
 	deploymentIndex := -1
 
 	for i, deployment := range deployments {
-		if len(deployment.Releases) != 2 {
-			continue
-		}
-
 		releases := map[string]bool{}
 		for _, rel := range deployment.Releases {
 			releases[rel.Name] = true
