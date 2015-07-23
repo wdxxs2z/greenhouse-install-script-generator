@@ -173,13 +173,13 @@ var _ = Describe("Generate", func() {
 			server := CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
 			session = StartCommand(exec.Command(generatePath,
 				"-boshUrl", server.URL(),
-				"-outputDir", path.Join(outputDir),
+				"-outputDir", nonExistingDir,
 				"-windowsUsername", "admin",
 				"-windowsPassword", "password",
 			))
 		})
 
-		It("creates the directory", func() {
+		FIt("creates the directory", func() {
 			Eventually(session).Should(gexec.Exit(0))
 			_, err := os.Stat(nonExistingDir)
 			Expect(err).NotTo(HaveOccurred())

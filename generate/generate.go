@@ -56,6 +56,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	fmt.Printf("%#v", *outputDir)
+	_, err := os.Stat(*outputDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			os.MkdirAll(*outputDir, 0644)
+		}
+	}
+
 	response := NewBoshRequest(*boshServerUrl + "/deployments")
 	defer response.Body.Close()
 
