@@ -19,4 +19,4 @@ Usage
 `go run ./generate/generate.go BOSH_URL OUTPUT_DIR`
 
 Sample for BOSH Lite:
-`go run ./generate/generate.go https://admin:admin@192.168.50.4:25555 /tmp`
+`go run ./generate/generate.go  -boshUrl https://admin:adminlocalhost:25555 -outputDir /tmp/bosh-lite-install-bat -windowsPassword password -windowsUsername username`
