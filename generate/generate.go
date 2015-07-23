@@ -56,6 +56,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	_, err := os.Stat(*outputDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			os.MkdirAll(*outputDir, 0755)
+		}
+	}
+
 	response := NewBoshRequest(*boshServerUrl + "/deployments")
 	defer response.Body.Close()
 

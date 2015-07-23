@@ -162,6 +162,30 @@ var _ = Describe("Generate", func() {
 		})
 	})
 
+	Context("when ran with an ouputDir param that points to a dir that doesn't exist", func() {
+		var session *gexec.Session
+		var nonExistingDir string
+		BeforeEach(func() {
+
+			outputDir, err := ioutil.TempDir("", "XXXXXXX")
+			nonExistingDir = path.Join(outputDir, "does_not_exist")
+			Expect(err).NotTo(HaveOccurred())
+			server := CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
+			session = StartCommand(exec.Command(generatePath,
+				"-boshUrl", server.URL(),
+				"-outputDir", nonExistingDir,
+				"-windowsUsername", "admin",
+				"-windowsPassword", "password",
+			))
+		})
+
+		It("creates the directory", func() {
+			Eventually(session).Should(gexec.Exit(0))
+			_, err := os.Stat(nonExistingDir)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
 	Context("when all required params are given", func() {
 
 		Context("when the server returns a one zone manifest", func() {
