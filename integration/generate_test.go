@@ -150,44 +150,7 @@ var _ = Describe("Generate", func() {
 		Expect(os.RemoveAll(outputDir)).To(Succeed())
 	})
 
-	Context("when ran without params", func() {
-		var session *gexec.Session
-		BeforeEach(func() {
-			session = StartCommand(exec.Command(generatePath))
-		})
-
-		It("prints an error message", func() {
-			Eventually(session).Should(gexec.Exit(1))
-			Expect(session.Err).Should(gbytes.Say("Usage of generate:"))
-		})
-	})
-
-	Context("when ran with an ouputDir param that points to a dir that doesn't exist", func() {
-		var session *gexec.Session
-		var nonExistingDir string
-		BeforeEach(func() {
-
-			outputDir, err := ioutil.TempDir("", "XXXXXXX")
-			nonExistingDir = path.Join(outputDir, "does_not_exist")
-			Expect(err).NotTo(HaveOccurred())
-			server := CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
-			session = StartCommand(exec.Command(generatePath,
-				"-boshUrl", server.URL(),
-				"-outputDir", nonExistingDir,
-				"-windowsUsername", "admin",
-				"-windowsPassword", "password",
-			))
-		})
-
-		It("creates the directory", func() {
-			Eventually(session).Should(gexec.Exit(0))
-			_, err := os.Stat(nonExistingDir)
-			Expect(err).NotTo(HaveOccurred())
-		})
-	})
-
-	Context("when all required params are given", func() {
-
+	Describe("Success scenarios", func() {
 		Context("when the server returns a one zone manifest", func() {
 			var server *ghttp.Server
 
@@ -273,50 +236,86 @@ var _ = Describe("Generate", func() {
 				Expect(path.Join(outputDir, "install_zone2.bat")).To(BeAnExistingFile())
 			})
 		})
-
-		Context("when the server is not reachable", func() {
-			var session *gexec.Session
-
-			BeforeEach(func() {
-				session, outputDir = StartProcess(generatePath, "http://1.2.3.4:5555")
-				Eventually(session, "15s", "1s").Should(gexec.Exit(1))
-			})
-
-			It("displays the reponse error to the user", func() {
-				Expect(session.Err).Should(gbytes.Say("Unable to establish connection to BOSH Director"))
-			})
-		})
-
-		Context("when the server returns an unauthorized error", func() {
-			var server *ghttp.Server
-			var session *gexec.Session
-
-			BeforeEach(func() {
-				server = Create401Server()
-				session, outputDir = StartProcess(generatePath, server.URL())
-				Eventually(session).Should(gexec.Exit(1))
-			})
-
-			It("displays the reponse error to the user", func() {
-				Expect(session.Err).Should(gbytes.Say("Not authorized"))
-			})
-		})
-
-		Context("when the server returns an ambiguous number of deployments", func() {
-			var server *ghttp.Server
-			var session *gexec.Session
-
-			BeforeEach(func() {
-				server = CreateServer("one_zone_manifest.yml", AmbiguousIndexDeployment())
-				session, outputDir = StartProcess(generatePath, server.URL())
-				Eventually(session).Should(gexec.Exit(1))
-			})
-
-			It("displays the reponse error to the user", func() {
-				Expect(session.Err).Should(gbytes.Say("BOSH Director does not have exactly one deployment containing a cf and diego release."))
-			})
-		})
-
 	})
 
+	Describe("Failure scenarios", func() {
+		Context("when ran without params", func() {
+			var session *gexec.Session
+			BeforeEach(func() {
+				session = StartCommand(exec.Command(generatePath))
+			})
+
+			It("prints an error message", func() {
+				Eventually(session).Should(gexec.Exit(1))
+				Expect(session.Err).Should(gbytes.Say("Usage of generate:"))
+			})
+
+			Context("when the server is not reachable", func() {
+				var session *gexec.Session
+
+				BeforeEach(func() {
+					session, outputDir = StartProcess(generatePath, "http://1.2.3.4:5555")
+					Eventually(session, "15s", "1s").Should(gexec.Exit(1))
+				})
+
+				It("displays the reponse error to the user", func() {
+					Expect(session.Err).Should(gbytes.Say("Unable to establish connection to BOSH Director"))
+				})
+			})
+
+			Context("when the server returns an unauthorized error", func() {
+				var server *ghttp.Server
+				var session *gexec.Session
+
+				BeforeEach(func() {
+					server = Create401Server()
+					session, outputDir = StartProcess(generatePath, server.URL())
+					Eventually(session).Should(gexec.Exit(1))
+				})
+
+				It("displays the reponse error to the user", func() {
+					Expect(session.Err).Should(gbytes.Say("Not authorized"))
+				})
+			})
+
+			Context("when the server returns an ambiguous number of deployments", func() {
+				var server *ghttp.Server
+				var session *gexec.Session
+
+				BeforeEach(func() {
+					server = CreateServer("one_zone_manifest.yml", AmbiguousIndexDeployment())
+					session, outputDir = StartProcess(generatePath, server.URL())
+					Eventually(session).Should(gexec.Exit(1))
+				})
+
+				It("displays the reponse error to the user", func() {
+					Expect(session.Err).Should(gbytes.Say("BOSH Director does not have exactly one deployment containing a cf and diego release."))
+				})
+			})
+		})
+
+		Context("when ran with an ouputDir param that points to a dir that doesn't exist", func() {
+			var session *gexec.Session
+			var nonExistingDir string
+			BeforeEach(func() {
+
+				outputDir, err := ioutil.TempDir("", "XXXXXXX")
+				nonExistingDir = path.Join(outputDir, "does_not_exist")
+				Expect(err).NotTo(HaveOccurred())
+				server := CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
+				session = StartCommand(exec.Command(generatePath,
+					"-boshUrl", server.URL(),
+					"-outputDir", nonExistingDir,
+					"-windowsUsername", "admin",
+					"-windowsPassword", "password",
+				))
+			})
+
+			It("creates the directory", func() {
+				Eventually(session).Should(gexec.Exit(0))
+				_, err := os.Stat(nonExistingDir)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
 })
