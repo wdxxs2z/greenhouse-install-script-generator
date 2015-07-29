@@ -317,5 +317,19 @@ var _ = Describe("Generate", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
+
+		Context("when the deployment has no certs", func() {
+			var session *gexec.Session
+
+			BeforeEach(func() {
+				server := CreateServer("no_cert_manifest.yml", DefaultIndexDeployment())
+				session, outputDir = StartProcess(generatePath, server.URL())
+				Eventually(session).Should(gexec.Exit(1))
+			})
+
+			It("displays the reponse error to the user", func() {
+				Expect(session.Err).Should(gbytes.Say("Failed to extract cert from deployment: properties.diego.etcd.client_cert"))
+			})
+		})
 	})
 })

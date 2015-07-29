@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -100,7 +101,11 @@ func main() {
 		"client_key":  "client.key",
 		"ca_cert":     "ca.crt",
 	} {
-		extractCert(manifest, *outputDir, k, f)
+		err = extractCert(manifest, *outputDir, k, f)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v", err)
+			os.Exit(1)
+		}
 	}
 
 	zones := map[string]struct{}{}
@@ -155,9 +160,14 @@ func generateInstallScript(outputDir string, args InstallerArguments) {
 	}
 }
 
-func extractCert(manifest interface{}, outputDir, key, filename string) {
-	caCert := GetIn(manifest, "properties", "diego", "etcd", key).(string)
-	ioutil.WriteFile(path.Join(outputDir, filename), []byte(caCert), 0644)
+func extractCert(manifest interface{}, outputDir, key, filename string) error {
+	result := GetIn(manifest, "properties", "diego", "etcd", key)
+	if result == nil {
+		return errors.New("Failed to extract cert from deployment: properties.diego.etcd." + key)
+	}
+	cert := result.(string)
+	ioutil.WriteFile(path.Join(outputDir, filename), []byte(cert), 0644)
+	return nil
 }
 
 func GetDiegoDeployment(deployments []models.IndexDeployment) int {
