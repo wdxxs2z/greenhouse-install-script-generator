@@ -328,7 +328,7 @@ var _ = Describe("Generate", func() {
 			})
 
 			It("displays the reponse error to the user", func() {
-				Expect(session.Err).Should(gbytes.Say("Failed to extract cert from deployment: properties.diego.etcd.client_cert"))
+				Expect(session.Err).Should(gbytes.Say("Failed to extract cert from deployment"))
 			})
 		})
 	})
