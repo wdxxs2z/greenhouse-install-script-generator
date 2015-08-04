@@ -28,7 +28,9 @@ const (
   CF_ETCD_CLUSTER=http://{{.EtcdCluster}}:4001 ^
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE={{.Zone}} ^
-  LOGGREGATOR_SHARED_SECRET={{.SharedSecret}} ^
+  LOGGREGATOR_SHARED_SECRET={{.SharedSecret}} ^{{ if .SyslogHostIP }}
+  SYSLOG_HOST_IP={{.SyslogHostIP}} ^
+  SYSLOG_PORT={{.SyslogPort}} ^{{ end }}
   ETCD_CA_FILE=%~dp0\ca.crt ^
   ETCD_CERT_FILE=%~dp0\client.crt ^
   ETCD_KEY_FILE=%~dp0\client.key
@@ -42,6 +44,8 @@ type InstallerArguments struct {
 	SharedSecret string
 	Username     string
 	Password     string
+	SyslogHostIP string
+	SyslogPort   string
 }
 
 func main() {
@@ -49,10 +53,24 @@ func main() {
 	outputDir := flag.String("outputDir", "", "Output directory (/tmp/scripts)")
 	windowsUsername := flag.String("windowsUsername", "", "Windows username")
 	windowsPassword := flag.String("windowsPassword", "", "Windows password")
+	syslogHostIP := flag.String("syslogHostIP", "", "(optional) Syslog Host IP Address")
+	syslogPort := flag.String("syslogPort", "", "(optional) Syslog Port Number")
 
 	flag.Parse()
 	if *boshServerUrl == "" || *outputDir == "" {
 		fmt.Fprintf(os.Stderr, "Usage of generate:\n")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	if *syslogHostIP != "" && *syslogPort == "" {
+		fmt.Fprintf(os.Stderr, "Expected syslogPort param to exist as well\n")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	if *syslogHostIP == "" && *syslogPort != "" {
+		fmt.Fprintf(os.Stderr, "Expected syslogHostIP param to exist as well\n")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
@@ -133,6 +151,8 @@ func main() {
 		SharedSecret: sharedSecret,
 		Username:     *windowsUsername,
 		Password:     *windowsPassword,
+		SyslogHostIP: *syslogHostIP,
+		SyslogPort:   *syslogPort,
 	}
 	for zone, _ := range zones {
 		args.Zone = zone
@@ -142,19 +162,16 @@ func main() {
 
 func generateInstallScript(outputDir string, args InstallerArguments) {
 	content := strings.Replace(installBatTemplate, "\n", "\r\n", -1)
-	temp, err := template.New("").Parse(content)
-	if err != nil {
-		log.Fatal(err)
-	}
+	temp := template.Must(template.New("").Parse(content))
 
 	filename := fmt.Sprintf("install_%s.bat", args.Zone)
-	f, err := os.OpenFile(path.Join(outputDir, filename), os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
+	file, err := os.OpenFile(path.Join(outputDir, filename), os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer f.Close()
+	defer file.Close()
 
-	err = temp.Execute(f, args)
+	err = temp.Execute(file, args)
 	if err != nil {
 		log.Fatal(err)
 	}

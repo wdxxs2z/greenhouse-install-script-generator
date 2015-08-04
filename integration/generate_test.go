@@ -160,6 +160,7 @@ var _ = Describe("Generate", func() {
 				session, outputDir = StartProcess(generatePath, server.URL())
 				Eventually(session).Should(gexec.Exit(-1))
 			})
+
 			It("sends get requests to get the deployments", func() {
 				Expect(server.ReceivedRequests()).To(HaveLen(2))
 			})
@@ -234,6 +235,48 @@ var _ = Describe("Generate", func() {
 				Expect(matches).To(HaveLen(2))
 				Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
 				Expect(path.Join(outputDir, "install_zone2.bat")).To(BeAnExistingFile())
+			})
+		})
+
+		Context("with syslog arguments", func() {
+			var lines []string
+			var script string
+
+			BeforeEach(func() {
+				outputDir, err := ioutil.TempDir("", "XXXXXXX")
+				Expect(err).NotTo(HaveOccurred())
+				server := CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
+				session := StartCommand(exec.Command(generatePath,
+					"-boshUrl", server.URL(),
+					"-outputDir", outputDir,
+					"-windowsUsername", "admin",
+					"-windowsPassword", "password",
+					"-syslogHostIP", "syslog-server.example.com",
+					"-syslogPort", "533",
+				))
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
+				lines = strings.Split(string(script), "\r\n")
+			})
+
+			It("includes them in the install script", func() {
+				expectedContent := `msiexec /norestart /i %~dp0\diego.msi ^
+  ADMIN_USERNAME=admin ^
+  ADMIN_PASSWORD=password ^
+  CONSUL_IPS=consul1.foo.bar ^
+  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
+  STACK=windows2012R2 ^
+  REDUNDANCY_ZONE=zone1 ^
+  LOGGREGATOR_SHARED_SECRET=secret123 ^
+  SYSLOG_HOST_IP=syslog-server.example.com ^
+  SYSLOG_PORT=533 ^
+  ETCD_CA_FILE=%~dp0\ca.crt ^
+  ETCD_CERT_FILE=%~dp0\client.crt ^
+  ETCD_KEY_FILE=%~dp0\client.key`
+				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+				Expect(script).To(Equal(expectedContent))
 			})
 		})
 	})
@@ -315,6 +358,36 @@ var _ = Describe("Generate", func() {
 				Eventually(session).Should(gexec.Exit(0))
 				_, err := os.Stat(nonExistingDir)
 				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Context("when ran with either a syslogHostIP param or a syslogPort", func() {
+			var session *gexec.Session
+
+			It("outputs an error message to console when only syslogHostIP is provided", func() {
+				session = StartCommand(exec.Command(generatePath,
+					"-boshUrl", "server",
+					"-outputDir", "directory",
+					"-windowsUsername", "admin",
+					"-windowsPassword", "password",
+					"-syslogHostIP", "syslog-server.example.com",
+				))
+
+				Eventually(session).Should(gexec.Exit(1))
+				Expect(session.Err).Should(gbytes.Say("Expected syslogPort param to exist as well"))
+			})
+
+			It("outputs an error message to console when only syslogPort is provided", func() {
+				session = StartCommand(exec.Command(generatePath,
+					"-boshUrl", "server",
+					"-outputDir", "directory",
+					"-windowsUsername", "admin",
+					"-windowsPassword", "password",
+					"-syslogPort", "533",
+				))
+
+				Eventually(session).Should(gexec.Exit(1))
+				Expect(session.Err).Should(gbytes.Say("Expected syslogHostIP param to exist as well"))
 			})
 		})
 
