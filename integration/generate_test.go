@@ -16,6 +16,10 @@ import (
 	"github.com/pivotal-cf/greenhouse-install-script-generator/models"
 )
 
+func DefaultServer() *ghttp.Server {
+	return CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
+}
+
 func CreateServer(manifest string, deployments []models.IndexDeployment) *ghttp.Server {
 	yaml, err := ioutil.ReadFile(manifest)
 	Expect(err).ToNot(HaveOccurred())
@@ -51,24 +55,28 @@ func Create401Server() *ghttp.Server {
 	return server
 }
 
-func StartProcess(generatePath string, serverUrl string) (*gexec.Session, string) {
+func StartGeneratorWithURL(serverUrl string) (*gexec.Session, string) {
 	var err error
 	outputDir, err := ioutil.TempDir("", "XXXXXXX")
 	Expect(err).NotTo(HaveOccurred())
 
-	return StartCommand(exec.Command(generatePath,
+	return StartGeneratorWithArgs(
 		"-boshUrl", serverUrl,
 		"-outputDir", outputDir,
 		"-windowsUsername", "admin",
 		"-windowsPassword", "password",
-	)), outputDir
+	), outputDir
 }
 
-func StartCommand(command *exec.Cmd) *gexec.Session {
+func StartGeneratorWithArgs(args ...string) *gexec.Session {
+	generatePath, err := gexec.Build("github.com/pivotal-cf/greenhouse-install-script-generator/generate")
+	Expect(err).NotTo(HaveOccurred())
+	command := exec.Command(generatePath, args...)
 	session, err := gexec.Start(command, GinkgoWriter, GinkgoWriter)
 	Expect(err).NotTo(HaveOccurred())
 	return session
 }
+
 func DefaultIndexDeployment() []models.IndexDeployment {
 	return []models.IndexDeployment{
 		{
@@ -138,13 +146,6 @@ func AmbiguousIndexDeployment() []models.IndexDeployment {
 
 var _ = Describe("Generate", func() {
 	var outputDir string
-	var generatePath string
-
-	BeforeEach(func() {
-		var err error
-		generatePath, err = gexec.Build("github.com/pivotal-cf/greenhouse-install-script-generator/generate")
-		Expect(err).NotTo(HaveOccurred())
-	})
 
 	AfterEach(func() {
 		Expect(os.RemoveAll(outputDir)).To(Succeed())
@@ -157,7 +158,7 @@ var _ = Describe("Generate", func() {
 			BeforeEach(func() {
 				server = CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
 				var session *gexec.Session
-				session, outputDir = StartProcess(generatePath, server.URL())
+				session, outputDir = StartGeneratorWithURL(server.URL())
 				Eventually(session).Should(gexec.Exit(-1))
 			})
 
@@ -225,7 +226,7 @@ var _ = Describe("Generate", func() {
 			BeforeEach(func() {
 				server = CreateServer("two_zone_manifest.yml", DefaultIndexDeployment())
 				var session *gexec.Session
-				session, outputDir = StartProcess(generatePath, server.URL())
+				session, outputDir = StartGeneratorWithURL(server.URL())
 				Eventually(session).Should(gexec.Exit(0))
 			})
 
@@ -243,17 +244,18 @@ var _ = Describe("Generate", func() {
 			var script string
 
 			BeforeEach(func() {
-				outputDir, err := ioutil.TempDir("", "XXXXXXX")
+				var err error
+				outputDir, err = ioutil.TempDir("", "XXXXXXX")
 				Expect(err).NotTo(HaveOccurred())
-				server := CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
-				session := StartCommand(exec.Command(generatePath,
+				server := DefaultServer()
+				session := StartGeneratorWithArgs(
 					"-boshUrl", server.URL(),
 					"-outputDir", outputDir,
 					"-windowsUsername", "admin",
 					"-windowsPassword", "password",
 					"-syslogHostIP", "syslog-server.example.com",
 					"-syslogPort", "533",
-				))
+				)
 				Eventually(session).Should(gexec.Exit(0))
 				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
 				Expect(err).NotTo(HaveOccurred())
@@ -285,7 +287,7 @@ var _ = Describe("Generate", func() {
 		Context("when ran without params", func() {
 			var session *gexec.Session
 			BeforeEach(func() {
-				session = StartCommand(exec.Command(generatePath))
+				session = StartGeneratorWithArgs()
 			})
 
 			It("prints an error message", func() {
@@ -297,7 +299,7 @@ var _ = Describe("Generate", func() {
 				var session *gexec.Session
 
 				BeforeEach(func() {
-					session, outputDir = StartProcess(generatePath, "http://1.2.3.4:5555")
+					session, outputDir = StartGeneratorWithURL("http://1.2.3.4:5555")
 					Eventually(session, "15s", "1s").Should(gexec.Exit(1))
 				})
 
@@ -312,7 +314,7 @@ var _ = Describe("Generate", func() {
 
 				BeforeEach(func() {
 					server = Create401Server()
-					session, outputDir = StartProcess(generatePath, server.URL())
+					session, outputDir = StartGeneratorWithURL(server.URL())
 					Eventually(session).Should(gexec.Exit(1))
 				})
 
@@ -327,7 +329,7 @@ var _ = Describe("Generate", func() {
 
 				BeforeEach(func() {
 					server = CreateServer("one_zone_manifest.yml", AmbiguousIndexDeployment())
-					session, outputDir = StartProcess(generatePath, server.URL())
+					session, outputDir = StartGeneratorWithURL(server.URL())
 					Eventually(session).Should(gexec.Exit(1))
 				})
 
@@ -345,13 +347,13 @@ var _ = Describe("Generate", func() {
 				outputDir, err := ioutil.TempDir("", "XXXXXXX")
 				nonExistingDir = path.Join(outputDir, "does_not_exist")
 				Expect(err).NotTo(HaveOccurred())
-				server := CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
-				session = StartCommand(exec.Command(generatePath,
+				server := DefaultServer()
+				session = StartGeneratorWithArgs(
 					"-boshUrl", server.URL(),
 					"-outputDir", nonExistingDir,
 					"-windowsUsername", "admin",
 					"-windowsPassword", "password",
-				))
+				)
 			})
 
 			It("creates the directory", func() {
@@ -365,29 +367,29 @@ var _ = Describe("Generate", func() {
 			var session *gexec.Session
 
 			It("outputs an error message to console when only syslogHostIP is provided", func() {
-				session = StartCommand(exec.Command(generatePath,
+				session = StartGeneratorWithArgs(
 					"-boshUrl", "server",
 					"-outputDir", "directory",
 					"-windowsUsername", "admin",
 					"-windowsPassword", "password",
 					"-syslogHostIP", "syslog-server.example.com",
-				))
+				)
 
 				Eventually(session).Should(gexec.Exit(1))
-				Expect(session.Err).Should(gbytes.Say("Expected syslogPort param to exist as well"))
+				Expect(session.Err).Should(gbytes.Say("Both syslogHostIP and syslogPort must be provided"))
 			})
 
 			It("outputs an error message to console when only syslogPort is provided", func() {
-				session = StartCommand(exec.Command(generatePath,
+				session = StartGeneratorWithArgs(
 					"-boshUrl", "server",
 					"-outputDir", "directory",
 					"-windowsUsername", "admin",
 					"-windowsPassword", "password",
 					"-syslogPort", "533",
-				))
+				)
 
 				Eventually(session).Should(gexec.Exit(1))
-				Expect(session.Err).Should(gbytes.Say("Expected syslogHostIP param to exist as well"))
+				Expect(session.Err).Should(gbytes.Say("Both syslogHostIP and syslogPort must be provided"))
 			})
 		})
 
@@ -396,7 +398,7 @@ var _ = Describe("Generate", func() {
 
 			BeforeEach(func() {
 				server := CreateServer("no_cert_manifest.yml", DefaultIndexDeployment())
-				session, outputDir = StartProcess(generatePath, server.URL())
+				session, outputDir = StartGeneratorWithURL(server.URL())
 				Eventually(session).Should(gexec.Exit(1))
 			})
 

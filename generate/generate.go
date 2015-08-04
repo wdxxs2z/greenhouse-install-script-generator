@@ -63,17 +63,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *syslogHostIP != "" && *syslogPort == "" {
-		fmt.Fprintf(os.Stderr, "Expected syslogPort param to exist as well\n")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	if *syslogHostIP == "" && *syslogPort != "" {
-		fmt.Fprintf(os.Stderr, "Expected syslogHostIP param to exist as well\n")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
+	verifySyslogArgs(*syslogHostIP, *syslogPort)
 
 	_, err := os.Stat(*outputDir)
 	if err != nil {
@@ -157,6 +147,14 @@ func main() {
 	for zone, _ := range zones {
 		args.Zone = zone
 		generateInstallScript(*outputDir, args)
+	}
+}
+
+func verifySyslogArgs(ip, port string) {
+	if (ip != "" && port == "") || (ip == "" && port != "") {
+		fmt.Fprintf(os.Stderr, "Both syslogHostIP and syslogPort must be provided\n")
+		flag.PrintDefaults()
+		os.Exit(1)
 	}
 }
 
