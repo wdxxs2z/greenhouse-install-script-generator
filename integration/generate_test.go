@@ -203,7 +203,7 @@ var _ = Describe("Generate", func() {
 				})
 
 				It("contains all the MSI parameters", func() {
-					expectedContent := `msiexec /norestart /i %~dp0\diego.msi ^
+					expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
   ADMIN_USERNAME=admin ^
   ADMIN_PASSWORD=password ^
   CONSUL_IPS=consul1.foo.bar ^
@@ -264,7 +264,7 @@ var _ = Describe("Generate", func() {
 			})
 
 			It("includes them in the install script", func() {
-				expectedContent := `msiexec /norestart /i %~dp0\diego.msi ^
+				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
   ADMIN_USERNAME=admin ^
   ADMIN_PASSWORD=password ^
   CONSUL_IPS=consul1.foo.bar ^
