@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudfoundry-incubator/greenhouse-install-script-generator/models"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"github.com/onsi/gomega/ghttp"
-	"github.com/pivotal-cf/greenhouse-install-script-generator/models"
 )
 
 func DefaultServer() *ghttp.Server {
@@ -69,7 +69,7 @@ func StartGeneratorWithURL(serverUrl string) (*gexec.Session, string) {
 }
 
 func StartGeneratorWithArgs(args ...string) *gexec.Session {
-	generatePath, err := gexec.Build("github.com/pivotal-cf/greenhouse-install-script-generator/generate")
+	generatePath, err := gexec.Build("github.com/cloudfoundry-incubator/greenhouse-install-script-generator/generate")
 	Expect(err).NotTo(HaveOccurred())
 	command := exec.Command(generatePath, args...)
 	session, err := gexec.Start(command, GinkgoWriter, GinkgoWriter)
