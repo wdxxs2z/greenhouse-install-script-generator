@@ -55,6 +55,7 @@ func main() {
 	windowsPassword := flag.String("windowsPassword", "", "Windows password")
 	syslogHostIP := flag.String("syslogHostIP", "", "(optional) Syslog Host IP Address")
 	syslogPort := flag.String("syslogPort", "", "(optional) Syslog Port Number")
+	awsSubnet := flag.String("awsSubnet", "", "(optional) AWS Subnet")
 
 	flag.Parse()
 	if *boshServerUrl == "" || *outputDir == "" {
@@ -116,14 +117,36 @@ func main() {
 		}
 	}
 
-	zones := map[string]struct{}{}
 	jobs := GetIn(manifest, "jobs").([]interface{})
+	var repJobs []interface{}
+
 	for _, job := range jobs {
-		zone := GetIn(job, "properties", "diego", "rep", "zone")
-		if zone == nil {
-			continue
+		jopHashRep := GetIn(job, "properties", "diego", "rep")
+		if jopHashRep != nil {
+			repJobs = append(repJobs, job)
 		}
-		zones[zone.(string)] = struct{}{}
+	}
+
+	zones := map[string]struct{}{}
+	for _, job := range repJobs {
+		zone := GetIn(job, "properties", "diego", "rep", "zone")
+
+		if zone != nil {
+			zones[zone.(string)] = struct{}{}
+		}
+	}
+
+	if *awsSubnet != "" {
+		networks := GetIn(manifest, "networks")
+		subnetNetworkName := getSubnetNetworkName(networks.([]interface{}), *awsSubnet)
+		subnetNetworkZone := getSubnetNetworkZone(repJobs, subnetNetworkName)
+
+		if subnetNetworkZone == "" {
+			fmt.Fprintf(os.Stderr, "Failed to find zone for subnet: %v", *awsSubnet)
+			os.Exit(1)
+		}
+
+		generateInstallScriptWrapperForZone(*outputDir, subnetNetworkZone)
 	}
 
 	consuls := GetIn(manifest, "properties", "consul", "agent", "servers", "lan")
@@ -148,6 +171,46 @@ func main() {
 		args.Zone = zone
 		generateInstallScript(*outputDir, args)
 	}
+}
+
+func generateInstallScriptWrapperForZone(outputDir, subnetNetworkZone string) {
+	file, err := os.OpenFile(path.Join(outputDir, "install.bat"), os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	filenameContents := fmt.Sprintf("%%~dp0\\install_%s.bat", subnetNetworkZone)
+	file.WriteString(filenameContents)
+}
+
+func getSubnetNetworkName(networks []interface{}, awsSubnet string) string {
+	for _, network := range networks {
+		networkName := network.(map[interface{}]interface{})["name"]
+
+		subnets := GetIn(network, "subnets").([]interface{})
+		for _, subnetProperties := range subnets {
+			subnet := GetIn(subnetProperties, "cloud_properties", "subnet").(string)
+			if subnet == awsSubnet {
+				return networkName.(string)
+			}
+		}
+	}
+	return ""
+}
+
+func getSubnetNetworkZone(repJobs []interface{}, subnetNetworkName string) string {
+	for _, job := range repJobs {
+		jobNetworks := GetIn(job, "networks")
+		zone := GetIn(job, "properties", "diego", "rep", "zone")
+		for _, jobNetwork := range jobNetworks.([]interface{}) {
+			networkName := jobNetwork.(map[interface{}]interface{})["name"]
+			if networkName == subnetNetworkName {
+				return zone.(string)
+			}
+		}
+	}
+	return ""
 }
 
 func verifySyslogArgs(ip, port string) {

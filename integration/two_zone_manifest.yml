@@ -21,8 +21,22 @@ jobs:
         rep:
           zone:
             zone1
+    networks:
+      - name: diego1
   - properties:
       diego:
         rep:
           zone:
             zone2
+    networks:
+      - name: diego2
+
+networks:
+  - name: diego1
+    subnets:
+      - cloud_properties:
+          subnet: subnet-8a204ed3
+  - name: diego2
+    subnets:
+      - cloud_properties:
+          subnet: subnet-deadbeef

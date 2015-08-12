@@ -281,6 +281,35 @@ var _ = Describe("Generate", func() {
 				Expect(script).To(Equal(expectedContent))
 			})
 		})
+
+		Context("with awsSubnet argument", func() {
+			var lines []string
+			var script string
+
+			BeforeEach(func() {
+				var err error
+				outputDir, err = ioutil.TempDir("", "XXXXXXX")
+				Expect(err).NotTo(HaveOccurred())
+				server := CreateServer("two_zone_manifest.yml", DefaultIndexDeployment())
+				session := StartGeneratorWithArgs(
+					"-boshUrl", server.URL(),
+					"-outputDir", outputDir,
+					"-windowsUsername", "admin",
+					"-windowsPassword", "password",
+					"-awsSubnet", "subnet-deadbeef",
+				)
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
+				lines = strings.Split(string(script), "\r\n")
+			})
+
+			It("calls the appropriate install script", func() {
+				expectedContent := `%~dp0\install_zone2.bat`
+				Expect(script).To(Equal(expectedContent))
+			})
+		})
 	})
 
 	Describe("Failure scenarios", func() {
@@ -360,6 +389,24 @@ var _ = Describe("Generate", func() {
 				Eventually(session).Should(gexec.Exit(0))
 				_, err := os.Stat(nonExistingDir)
 				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Context("when awsSubnet is provided but the deployment has no matching subnet", func() {
+			var session *gexec.Session
+
+			It("outputs an error message to console", func() {
+				server := CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
+				session = StartGeneratorWithArgs(
+					"-boshUrl", server.URL(),
+					"-outputDir", "directory",
+					"-windowsUsername", "admin",
+					"-windowsPassword", "password",
+					"-awsSubnet", "subnet-neverfind",
+				)
+
+				Eventually(session).Should(gexec.Exit(1))
+				Expect(session.Err).Should(gbytes.Say("Failed to find zone for subnet: subnet-neverfind"))
 			})
 		})
 

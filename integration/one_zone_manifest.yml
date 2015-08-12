@@ -21,3 +21,11 @@ jobs:
         rep:
           zone:
             zone1
+    networks:
+      - name: diego1
+
+networks:
+  - name: diego1
+    subnets:
+      - cloud_properties:
+          subnet: subnet-8a204ed3
