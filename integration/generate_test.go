@@ -152,7 +152,7 @@ var _ = Describe("Generate", func() {
 	})
 
 	Describe("Success scenarios", func() {
-		Context("when the server returns a one zone manifest", func() {
+		Context("when the server returns a one zone manifest, this includes syslog", func() {
 			var server *ghttp.Server
 
 			BeforeEach(func() {
@@ -222,7 +222,7 @@ var _ = Describe("Generate", func() {
 			})
 		})
 
-		Context("when the server returns a two zone manifest", func() {
+		Context("when the server returns a two zone manifest, this does not include syslog", func() {
 			var server *ghttp.Server
 
 			BeforeEach(func() {
@@ -238,47 +238,6 @@ var _ = Describe("Generate", func() {
 				Expect(matches).To(HaveLen(2))
 				Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
 				Expect(path.Join(outputDir, "install_zone2.bat")).To(BeAnExistingFile())
-			})
-		})
-
-		Context("when the yaml contains syslog values", func() {
-			var lines []string
-			var script string
-
-			BeforeEach(func() {
-				var err error
-				outputDir, err = ioutil.TempDir("", "XXXXXXX")
-				Expect(err).NotTo(HaveOccurred())
-				server := DefaultServer()
-				session := StartGeneratorWithArgs(
-					"-boshUrl", server.URL(),
-					"-outputDir", outputDir,
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-				)
-				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
-				lines = strings.Split(string(script), "\r\n")
-			})
-
-			It("includes them in the install script", func() {
-				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
-  ADMIN_USERNAME=admin ^
-  ADMIN_PASSWORD=password ^
-  CONSUL_IPS=consul1.foo.bar ^
-  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
-  STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=zone1 ^
-  LOGGREGATOR_SHARED_SECRET=secret123 ^
-  SYSLOG_HOST_IP=logs2.test.com ^
-  SYSLOG_PORT=11111 ^
-  ETCD_CA_FILE=%~dp0\ca.crt ^
-  ETCD_CERT_FILE=%~dp0\client.crt ^
-  ETCD_KEY_FILE=%~dp0\client.key`
-				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
-				Expect(script).To(Equal(expectedContent))
 			})
 		})
 	})
