@@ -211,6 +211,8 @@ var _ = Describe("Generate", func() {
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE=zone1 ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
+  SYSLOG_HOST_IP=logs2.test.com ^
+  SYSLOG_PORT=11111 ^
   ETCD_CA_FILE=%~dp0\ca.crt ^
   ETCD_CERT_FILE=%~dp0\client.crt ^
   ETCD_KEY_FILE=%~dp0\client.key`
@@ -239,7 +241,7 @@ var _ = Describe("Generate", func() {
 			})
 		})
 
-		Context("with syslog arguments", func() {
+		Context("when the yaml contains syslog values", func() {
 			var lines []string
 			var script string
 
@@ -253,8 +255,6 @@ var _ = Describe("Generate", func() {
 					"-outputDir", outputDir,
 					"-windowsUsername", "admin",
 					"-windowsPassword", "password",
-					"-syslogHostIP", "syslog-server.example.com",
-					"-syslogPort", "533",
 				)
 				Eventually(session).Should(gexec.Exit(0))
 				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
@@ -272,8 +272,8 @@ var _ = Describe("Generate", func() {
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE=zone1 ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
-  SYSLOG_HOST_IP=syslog-server.example.com ^
-  SYSLOG_PORT=533 ^
+  SYSLOG_HOST_IP=logs2.test.com ^
+  SYSLOG_PORT=11111 ^
   ETCD_CA_FILE=%~dp0\ca.crt ^
   ETCD_CERT_FILE=%~dp0\client.crt ^
   ETCD_KEY_FILE=%~dp0\client.key`
@@ -360,36 +360,6 @@ var _ = Describe("Generate", func() {
 				Eventually(session).Should(gexec.Exit(0))
 				_, err := os.Stat(nonExistingDir)
 				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
-		Context("when ran with either a syslogHostIP param or a syslogPort", func() {
-			var session *gexec.Session
-
-			It("outputs an error message to console when only syslogHostIP is provided", func() {
-				session = StartGeneratorWithArgs(
-					"-boshUrl", "server",
-					"-outputDir", "directory",
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-					"-syslogHostIP", "syslog-server.example.com",
-				)
-
-				Eventually(session).Should(gexec.Exit(1))
-				Expect(session.Err).Should(gbytes.Say("Both syslogHostIP and syslogPort must be provided"))
-			})
-
-			It("outputs an error message to console when only syslogPort is provided", func() {
-				session = StartGeneratorWithArgs(
-					"-boshUrl", "server",
-					"-outputDir", "directory",
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-					"-syslogPort", "533",
-				)
-
-				Eventually(session).Should(gexec.Exit(1))
-				Expect(session.Err).Should(gbytes.Say("Both syslogHostIP and syslogPort must be provided"))
 			})
 		})
 

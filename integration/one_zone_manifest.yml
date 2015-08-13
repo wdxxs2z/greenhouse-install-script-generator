@@ -14,6 +14,9 @@ properties:
       ca_cert: CA_CERT
       client_cert: CLIENT_CERT
       client_key: CLIENT_KEY
+  syslog_daemon_config:
+    address: logs2.test.com
+    port: 11111
 
 jobs:
   - properties:
