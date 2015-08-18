@@ -166,22 +166,50 @@ var _ = Describe("Generate", func() {
 				Expect(server.ReceivedRequests()).To(HaveLen(2))
 			})
 
-			It("generates the certificate authority cert", func() {
-				cert, err := ioutil.ReadFile(path.Join(outputDir, "ca.crt"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(cert).To(BeEquivalentTo("CA_CERT"))
+			Context("etcd files", func() {
+				It("generates the certificate authority cert", func() {
+					cert, err := ioutil.ReadFile(path.Join(outputDir, "etcd_ca.crt"))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(cert).To(BeEquivalentTo("ETCD_CA_CERT"))
+				})
+
+				It("generates the client cert", func() {
+					cert, err := ioutil.ReadFile(path.Join(outputDir, "etcd_client.crt"))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(cert).To(BeEquivalentTo("ETCD_CLIENT_CERT"))
+				})
+
+				It("generates the client key", func() {
+					cert, err := ioutil.ReadFile(path.Join(outputDir, "etcd_client.key"))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(cert).To(BeEquivalentTo("ETCD_CLIENT_KEY"))
+				})
 			})
 
-			It("generates the client cert", func() {
-				cert, err := ioutil.ReadFile(path.Join(outputDir, "client.crt"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(cert).To(BeEquivalentTo("CLIENT_CERT"))
-			})
+			Context("consul files", func() {
+				It("generates the certificate authority cert", func() {
+					cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_ca.crt"))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(cert).To(BeEquivalentTo("CONSUL_CA_CERT"))
+				})
 
-			It("generates the client key", func() {
-				cert, err := ioutil.ReadFile(path.Join(outputDir, "client.key"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(cert).To(BeEquivalentTo("CLIENT_KEY"))
+				It("generates the agent cert", func() {
+					cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_agent.crt"))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(cert).To(BeEquivalentTo("CONSUL_AGENT_CERT"))
+				})
+
+				It("generates the agent key", func() {
+					cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_agent.key"))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(cert).To(BeEquivalentTo("CONSUL_AGENT_KEY"))
+				})
+
+				It("generates the encrypt key", func() {
+					cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_encrypt.key"))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(cert).To(BeEquivalentTo("CONSUL_ENCRYPT"))
+				})
 			})
 
 			It("generates only one file", func() {
@@ -211,9 +239,13 @@ var _ = Describe("Generate", func() {
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE=zone1 ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
-  ETCD_CA_FILE=%~dp0\ca.crt ^
-  ETCD_CERT_FILE=%~dp0\client.crt ^
-  ETCD_KEY_FILE=%~dp0\client.key`
+  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
+  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
+  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
+  CONSUL_ENCRYPT_KEY=%~dp0\consul_encrypt.key ^
+  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
+  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
+  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
 					expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
 					Expect(script).To(Equal(expectedContent))
 				})
@@ -274,9 +306,13 @@ var _ = Describe("Generate", func() {
   LOGGREGATOR_SHARED_SECRET=secret123 ^
   SYSLOG_HOST_IP=syslog-server.example.com ^
   SYSLOG_PORT=533 ^
-  ETCD_CA_FILE=%~dp0\ca.crt ^
-  ETCD_CERT_FILE=%~dp0\client.crt ^
-  ETCD_KEY_FILE=%~dp0\client.key`
+  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
+  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
+  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
+  CONSUL_ENCRYPT_KEY=%~dp0\consul_encrypt.key ^
+  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
+  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
+  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
 				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
 				Expect(script).To(Equal(expectedContent))
 			})
@@ -440,11 +476,25 @@ var _ = Describe("Generate", func() {
 			})
 		})
 
-		Context("when the deployment has no certs", func() {
+		Context("when the deployment has no etcd certs", func() {
 			var session *gexec.Session
 
 			BeforeEach(func() {
-				server := CreateServer("no_cert_manifest.yml", DefaultIndexDeployment())
+				server := CreateServer("no_etcd_cert_manifest.yml", DefaultIndexDeployment())
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(1))
+			})
+
+			It("displays the reponse error to the user", func() {
+				Expect(session.Err).Should(gbytes.Say("Failed to extract cert from deployment"))
+			})
+		})
+
+		Context("when the deployment has no consul certs", func() {
+			var session *gexec.Session
+
+			BeforeEach(func() {
+				server := CreateServer("no_consul_cert_manifest.yml", DefaultIndexDeployment())
 				session, outputDir = StartGeneratorWithURL(server.URL())
 				Eventually(session).Should(gexec.Exit(1))
 			})
