@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -57,8 +58,6 @@ func main() {
 	outputDir := flag.String("outputDir", "", "Output directory (/tmp/scripts)")
 	windowsUsername := flag.String("windowsUsername", "", "Windows username")
 	windowsPassword := flag.String("windowsPassword", "", "Windows password")
-	syslogHostIP := flag.String("syslogHostIP", "", "(optional) Syslog Host IP Address")
-	syslogPort := flag.String("syslogPort", "", "(optional) Syslog Port Number")
 	awsSubnet := flag.String("awsSubnet", "", "(optional) AWS Subnet")
 
 	flag.Parse()
@@ -67,8 +66,6 @@ func main() {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
-
-	verifySyslogArgs(*syslogHostIP, *syslogPort)
 
 	_, err := os.Stat(*outputDir)
 	if err != nil {
@@ -165,6 +162,9 @@ func main() {
 	joinedConsulIPs := strings.Join(consulIPs, ",")
 	etcdCluster := GetIn(manifest, "properties", "etcd", "machines", 0).(string)
 	sharedSecret := GetIn(manifest, "properties", "loggregator_endpoint", "shared_secret").(string)
+	syslogHostIP, _ := GetIn(manifest, "properties", "syslog_daemon_config", "address").(string)
+	portValue, _ := GetIn(manifest, "properties", "syslog_daemon_config", "port").(int64)
+	syslogPort := strconv.FormatInt(portValue, 10)
 
 	args := InstallerArguments{
 		ConsulIPs:    joinedConsulIPs,
@@ -172,8 +172,8 @@ func main() {
 		SharedSecret: sharedSecret,
 		Username:     *windowsUsername,
 		Password:     *windowsPassword,
-		SyslogHostIP: *syslogHostIP,
-		SyslogPort:   *syslogPort,
+		SyslogHostIP: syslogHostIP,
+		SyslogPort:   syslogPort,
 	}
 	for zone, _ := range zones {
 		args.Zone = zone

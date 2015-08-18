@@ -152,6 +152,42 @@ var _ = Describe("Generate", func() {
 	})
 
 	Describe("Success scenarios", func() {
+		Context("when the deployment has syslog", func() {
+			var session *gexec.Session
+			var script string
+
+			BeforeEach(func() {
+				server := CreateServer("syslog_manifest.yml", DefaultIndexDeployment())
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
+			})
+
+			It("contains all the MSI parameters", func() {
+				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
+  ADMIN_USERNAME=admin ^
+  ADMIN_PASSWORD=password ^
+  CONSUL_IPS=consul1.foo.bar ^
+  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
+  STACK=windows2012R2 ^
+  REDUNDANCY_ZONE=zone1 ^
+  LOGGREGATOR_SHARED_SECRET=secret123 ^
+  SYSLOG_HOST_IP=logs2.test.com ^
+  SYSLOG_PORT=11111 ^
+  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
+  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
+  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
+  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
+  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
+  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
+  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
+				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+				Expect(script).To(Equal(expectedContent))
+			})
+		})
+
 		Context("when the server returns a one zone manifest", func() {
 			var server *ghttp.Server
 
@@ -271,53 +307,6 @@ var _ = Describe("Generate", func() {
 			})
 		})
 
-		Context("with syslog arguments", func() {
-			var lines []string
-			var script string
-
-			BeforeEach(func() {
-				var err error
-				outputDir, err = ioutil.TempDir("", "XXXXXXX")
-				Expect(err).NotTo(HaveOccurred())
-				server := DefaultServer()
-				session := StartGeneratorWithArgs(
-					"-boshUrl", server.URL(),
-					"-outputDir", outputDir,
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-					"-syslogHostIP", "syslog-server.example.com",
-					"-syslogPort", "533",
-				)
-				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
-				lines = strings.Split(string(script), "\r\n")
-			})
-
-			It("includes them in the install script", func() {
-				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
-  ADMIN_USERNAME=admin ^
-  ADMIN_PASSWORD=password ^
-  CONSUL_IPS=consul1.foo.bar ^
-  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
-  STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=zone1 ^
-  LOGGREGATOR_SHARED_SECRET=secret123 ^
-  SYSLOG_HOST_IP=syslog-server.example.com ^
-  SYSLOG_PORT=533 ^
-  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
-  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
-  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
-  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
-  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
-  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
-  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
-				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
-				Expect(script).To(Equal(expectedContent))
-			})
-		})
-
 		Context("with awsSubnet argument", func() {
 			var lines []string
 			var script string
@@ -432,10 +421,12 @@ var _ = Describe("Generate", func() {
 			var session *gexec.Session
 
 			It("outputs an error message to console", func() {
+				outputDir, err := ioutil.TempDir("", "XXXXXXX")
+				Expect(err).NotTo(HaveOccurred())
 				server := CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
 				session = StartGeneratorWithArgs(
 					"-boshUrl", server.URL(),
-					"-outputDir", "directory",
+					"-outputDir", outputDir,
 					"-windowsUsername", "admin",
 					"-windowsPassword", "password",
 					"-awsSubnet", "subnet-neverfind",
@@ -443,36 +434,6 @@ var _ = Describe("Generate", func() {
 
 				Eventually(session).Should(gexec.Exit(1))
 				Expect(session.Err).Should(gbytes.Say("Failed to find zone for subnet: subnet-neverfind"))
-			})
-		})
-
-		Context("when ran with either a syslogHostIP param or a syslogPort", func() {
-			var session *gexec.Session
-
-			It("outputs an error message to console when only syslogHostIP is provided", func() {
-				session = StartGeneratorWithArgs(
-					"-boshUrl", "server",
-					"-outputDir", "directory",
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-					"-syslogHostIP", "syslog-server.example.com",
-				)
-
-				Eventually(session).Should(gexec.Exit(1))
-				Expect(session.Err).Should(gbytes.Say("Both syslogHostIP and syslogPort must be provided"))
-			})
-
-			It("outputs an error message to console when only syslogPort is provided", func() {
-				session = StartGeneratorWithArgs(
-					"-boshUrl", "server",
-					"-outputDir", "directory",
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-					"-syslogPort", "533",
-				)
-
-				Eventually(session).Should(gexec.Exit(1))
-				Expect(session.Err).Should(gbytes.Say("Both syslogHostIP and syslogPort must be provided"))
 			})
 		})
 

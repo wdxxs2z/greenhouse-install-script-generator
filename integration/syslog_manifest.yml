@@ -1,0 +1,38 @@
+properties:
+  consul:
+    ca_cert: CONSUL_CA_CERT
+    agent_cert: CONSUL_AGENT_CERT
+    agent_key: CONSUL_AGENT_KEY
+    encrypt_key: CONSUL_ENCRYPT
+    agent:
+      servers:
+        lan:
+          - consul1.foo.bar
+  etcd:
+    machines:
+      - etcd1.foo.bar
+  loggregator_endpoint:
+    shared_secret: secret123
+  diego:
+    etcd:
+      ca_cert: CA_CERT
+      client_cert: CLIENT_CERT
+      client_key: CLIENT_KEY
+  syslog_daemon_config:
+    address: logs2.test.com
+    port: 11111
+
+jobs:
+  - properties:
+      diego:
+        rep:
+          zone:
+            zone1
+    networks:
+      - name: diego1
+
+networks:
+  - name: diego1
+    subnets:
+      - cloud_properties:
+          subnet: subnet-8a204ed3
