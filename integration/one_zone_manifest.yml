@@ -1,9 +1,5 @@
 properties:
   consul:
-    ca_cert: CONSUL_CA_CERT
-    agent_cert: CONSUL_AGENT_CERT
-    agent_key: CONSUL_AGENT_KEY
-    encrypt_key: CONSUL_ENCRYPT
     agent:
       servers:
         lan:
@@ -15,9 +11,9 @@ properties:
     shared_secret: secret123
   diego:
     etcd:
-      ca_cert: ETCD_CA_CERT
-      client_cert: ETCD_CLIENT_CERT
-      client_key: ETCD_CLIENT_KEY
+      ca_cert: CA_CERT
+      client_cert: CLIENT_CERT
+      client_key: CLIENT_KEY
 
 jobs:
   - properties:

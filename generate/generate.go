@@ -32,14 +32,10 @@ const (
   LOGGREGATOR_SHARED_SECRET={{.SharedSecret}} ^{{ if .SyslogHostIP }}
   SYSLOG_HOST_IP={{.SyslogHostIP}} ^
   SYSLOG_PORT={{.SyslogPort}} ^{{ end }}
-  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
-  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
-  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
-  CONSUL_ENCRYPT_KEY=%~dp0\consul_encrypt.key ^
-  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
-  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
-  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key
-  `
+  ETCD_CA_FILE=%~dp0\ca.crt ^
+  ETCD_CERT_FILE=%~dp0\client.crt ^
+  ETCD_KEY_FILE=%~dp0\client.key
+`
 )
 
 type InstallerArguments struct {
@@ -106,16 +102,12 @@ func main() {
 	var manifest interface{}
 	candiedyaml.NewDecoder(buf).Decode(&manifest)
 
-	for key, filename := range map[string]string{
-		"properties.diego.etcd.client_cert": "etcd_client.crt",
-		"properties.diego.etcd.client_key":  "etcd_client.key",
-		"properties.diego.etcd.ca_cert":     "etcd_ca.crt",
-		"properties.consul.agent_cert":      "consul_agent.crt",
-		"properties.consul.agent_key":       "consul_agent.key",
-		"properties.consul.ca_cert":         "consul_ca.crt",
-		"properties.consul.encrypt_key":     "consul_encrypt.key",
+	for k, f := range map[string]string{
+		"client_cert": "client.crt",
+		"client_key":  "client.key",
+		"ca_cert":     "ca.crt",
 	} {
-		err = extractCert(manifest, *outputDir, filename, key)
+		err = extractCert(manifest, *outputDir, k, f)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%v", err)
 			os.Exit(1)
@@ -246,14 +238,10 @@ func generateInstallScript(outputDir string, args InstallerArguments) {
 	}
 }
 
-func extractCert(manifest interface{}, outputDir, filename, pathString string) error {
-	manifestPath := []interface{}{}
-	for _, s := range strings.Split(pathString, ".") {
-		manifestPath = append(manifestPath, s)
-	}
-	result := GetIn(manifest, manifestPath...)
+func extractCert(manifest interface{}, outputDir, key, filename string) error {
+	result := GetIn(manifest, "properties", "diego", "etcd", key)
 	if result == nil {
-		return errors.New("Failed to extract cert from deployment: " + pathString)
+		return errors.New("Failed to extract cert from deployment: properties.diego.etcd." + key)
 	}
 	cert := result.(string)
 	ioutil.WriteFile(path.Join(outputDir, filename), []byte(cert), 0644)
