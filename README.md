@@ -17,4 +17,4 @@ Usage
 -----
 Sample for BOSH Lite:
 
-`go run ./generate/generate.go -boshUrl https://admin:admin@192.168.50.4:25555 -outputDir /tmp/bosh-lite-install-bat -windowsPassword password -windowsUsername username -syslogHostIP logs.papertrail.com -syslogPort 5555`
+`go run ./generate/generate.go -boshUrl https://admin:admin@192.168.50.4:25555 -outputDir /tmp/bosh-lite-install-bat -windowsPassword password -windowsUsername username
