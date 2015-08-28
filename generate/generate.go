@@ -32,10 +32,14 @@ const (
   LOGGREGATOR_SHARED_SECRET={{.SharedSecret}} ^{{ if .SyslogHostIP }}
   SYSLOG_HOST_IP={{.SyslogHostIP}} ^
   SYSLOG_PORT={{.SyslogPort}} ^{{ end }}
-  ETCD_CA_FILE=%~dp0\ca.crt ^
-  ETCD_CERT_FILE=%~dp0\client.crt ^
-  ETCD_KEY_FILE=%~dp0\client.key
-`
+  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
+  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
+  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
+  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
+  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
+  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
+  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key
+  `
 )
 
 type InstallerArguments struct {
@@ -102,23 +106,30 @@ func main() {
 	var manifest interface{}
 	candiedyaml.NewDecoder(buf).Decode(&manifest)
 
-	for k, f := range map[string]string{
-		"client_cert": "client.crt",
-		"client_key":  "client.key",
-		"ca_cert":     "ca.crt",
+	for key, filename := range map[string]string{
+		"properties.diego.etcd.client_cert": "etcd_client.crt",
+		"properties.diego.etcd.client_key":  "etcd_client.key",
+		"properties.diego.etcd.ca_cert":     "etcd_ca.crt",
+		"properties.consul.agent_cert":      "consul_agent.crt",
+		"properties.consul.agent_key":       "consul_agent.key",
+		"properties.consul.ca_cert":         "consul_ca.crt",
+		"properties.consul.encrypt_keys.0":  "consul_encrypt.key",
 	} {
-		err = extractCert(manifest, *outputDir, k, f)
+		err = extractCert(manifest, *outputDir, filename, key)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%v", err)
 			os.Exit(1)
 		}
 	}
 
-	jobs := GetIn(manifest, "jobs").([]interface{})
+	result, err := GetIn(manifest, "jobs")
+	FailOnError(err)
+	jobs := result.([]interface{})
 	var repJobs []interface{}
 
 	for _, job := range jobs {
-		jopHashRep := GetIn(job, "properties", "diego", "rep")
+		jopHashRep, err := GetIn(job, "properties", "diego", "rep")
+		FailOnError(err)
 		if jopHashRep != nil {
 			repJobs = append(repJobs, job)
 		}
@@ -126,7 +137,8 @@ func main() {
 
 	zones := map[string]struct{}{}
 	for _, job := range repJobs {
-		zone := GetIn(job, "properties", "diego", "rep", "zone")
+		zone, err := GetIn(job, "properties", "diego", "rep", "zone")
+		FailOnError(err)
 
 		if zone != nil {
 			zones[zone.(string)] = struct{}{}
@@ -134,7 +146,8 @@ func main() {
 	}
 
 	if *awsSubnet != "" {
-		networks := GetIn(manifest, "networks")
+		networks, err := GetIn(manifest, "networks")
+		FailOnError(err)
 		subnetNetworkName := getSubnetNetworkName(networks.([]interface{}), *awsSubnet)
 		subnetNetworkZone := getSubnetNetworkZone(repJobs, subnetNetworkName)
 
@@ -146,16 +159,25 @@ func main() {
 		generateInstallScriptWrapperForZone(*outputDir, subnetNetworkZone)
 	}
 
-	consuls := GetIn(manifest, "properties", "consul", "agent", "servers", "lan")
+	consuls, err := GetIn(manifest, "properties", "consul", "agent", "servers", "lan")
+	FailOnError(err)
 	consulIPs := []string{}
 	for _, c := range consuls.([]interface{}) {
 		consulIPs = append(consulIPs, c.(string))
 	}
 	joinedConsulIPs := strings.Join(consulIPs, ",")
-	etcdCluster := GetIn(manifest, "properties", "etcd", "machines", 0).(string)
-	sharedSecret := GetIn(manifest, "properties", "loggregator_endpoint", "shared_secret").(string)
-	syslogHostIP, _ := GetIn(manifest, "properties", "syslog_daemon_config", "address").(string)
-	portValue, _ := GetIn(manifest, "properties", "syslog_daemon_config", "port").(int64)
+	result, err = GetIn(manifest, "properties", "etcd", "machines", 0)
+	FailOnError(err)
+	etcdCluster := result.(string)
+	result, err = GetIn(manifest, "properties", "loggregator_endpoint", "shared_secret")
+	FailOnError(err)
+	sharedSecret := result.(string)
+	result, err = GetIn(manifest, "properties", "syslog_daemon_config", "address")
+	FailOnError(err)
+	syslogHostIP, _ := result.(string)
+	result, err = GetIn(manifest, "properties", "syslog_daemon_config", "port")
+	FailOnError(err)
+	portValue, _ := result.(int64)
 	syslogPort := strconv.FormatInt(portValue, 10)
 
 	args := InstallerArguments{
@@ -170,6 +192,12 @@ func main() {
 	for zone, _ := range zones {
 		args.Zone = zone
 		generateInstallScript(*outputDir, args)
+	}
+}
+
+func FailOnError(err error) {
+	if err != nil {
+		panic(err)
 	}
 }
 
@@ -188,9 +216,14 @@ func getSubnetNetworkName(networks []interface{}, awsSubnet string) string {
 	for _, network := range networks {
 		networkName := network.(map[interface{}]interface{})["name"]
 
-		subnets := GetIn(network, "subnets").([]interface{})
+		result, err := GetIn(network, "subnets")
+		FailOnError(err)
+		subnets := result.([]interface{})
+
 		for _, subnetProperties := range subnets {
-			subnet := GetIn(subnetProperties, "cloud_properties", "subnet").(string)
+			result, err = GetIn(subnetProperties, "cloud_properties", "subnet")
+			FailOnError(err)
+			subnet := result.(string)
 			if subnet == awsSubnet {
 				return networkName.(string)
 			}
@@ -201,8 +234,10 @@ func getSubnetNetworkName(networks []interface{}, awsSubnet string) string {
 
 func getSubnetNetworkZone(repJobs []interface{}, subnetNetworkName string) string {
 	for _, job := range repJobs {
-		jobNetworks := GetIn(job, "networks")
-		zone := GetIn(job, "properties", "diego", "rep", "zone")
+		jobNetworks, err := GetIn(job, "networks")
+		FailOnError(err)
+		zone, err := GetIn(job, "properties", "diego", "rep", "zone")
+		FailOnError(err)
 		for _, jobNetwork := range jobNetworks.([]interface{}) {
 			networkName := jobNetwork.(map[interface{}]interface{})["name"]
 			if networkName == subnetNetworkName {
@@ -238,10 +273,15 @@ func generateInstallScript(outputDir string, args InstallerArguments) {
 	}
 }
 
-func extractCert(manifest interface{}, outputDir, key, filename string) error {
-	result := GetIn(manifest, "properties", "diego", "etcd", key)
+func extractCert(manifest interface{}, outputDir, filename, pathString string) error {
+	manifestPath := []interface{}{}
+	for _, s := range strings.Split(pathString, ".") {
+		manifestPath = append(manifestPath, s)
+	}
+	result, err := GetIn(manifest, manifestPath...)
+	FailOnError(err)
 	if result == nil {
-		return errors.New("Failed to extract cert from deployment: properties.diego.etcd." + key)
+		return errors.New("Failed to extract cert from deployment: " + pathString)
 	}
 	cert := result.(string)
 	ioutil.WriteFile(path.Join(outputDir, filename), []byte(cert), 0644)
@@ -295,24 +335,34 @@ func NewBoshRequest(endpoint string) *http.Response {
 //
 // Example:
 //    GetIn(obj, []string{"consul", "agent", ...})
-func GetIn(obj interface{}, path ...interface{}) interface{} {
+func GetIn(obj interface{}, path ...interface{}) (interface{}, error) {
 	if len(path) == 0 {
-		return obj
+		return obj, nil
 	}
 
 	switch x := obj.(type) {
 	case map[interface{}]interface{}:
 		obj = x[path[0]]
 		if obj == nil {
-			return nil
+			return nil, nil
 		}
 	case []interface{}:
-		obj = x[path[0].(int)]
+		var index int
+		var err error
+		index, ok := path[0].(int)
+		if !ok {
+			index, err = strconv.Atoi(path[0].(string))
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		obj = x[index]
 		if obj == nil {
-			return nil
+			return nil, nil
 		}
 	default:
-		return nil
+		return nil, nil
 	}
 
 	return GetIn(obj, path[1:]...)

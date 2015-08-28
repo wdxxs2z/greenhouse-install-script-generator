@@ -33,7 +33,9 @@ foo:
 		})
 
 		It("returns the element", func() {
-			Expect(GetIn(obj, "foo", "bar", "baz")).To(BeEquivalentTo([]interface{}{"one", "two"}))
+			result, err := GetIn(obj, "foo", "bar", "baz")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeEquivalentTo([]interface{}{"one", "two"}))
 		})
 	})
 
@@ -48,7 +50,9 @@ foo:
 		})
 
 		It("returns nil", func() {
-			Expect(GetIn(obj, "foo", "bar", "baz")).To(BeNil())
+			result, err := GetIn(obj, "foo", "bar", "baz")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeNil())
 		})
 	})
 
@@ -63,7 +67,9 @@ foo:
 		})
 
 		It("returns nil", func() {
-			Expect(GetIn(obj, "foo", "bar", "baz")).To(BeNil())
+			result, err := GetIn(obj, "foo", "bar", "baz")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeNil())
 		})
 	})
 
@@ -78,7 +84,21 @@ foo:
 		})
 
 		It("can access items by index", func() {
-			Expect(GetIn(obj, "foo", "bar", 0, "baz")).To(BeEquivalentTo(5))
+			result, err := GetIn(obj, "foo", "bar", 0, "baz")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeEquivalentTo(5))
+		})
+
+		It("casts the key to an int when accessing an array", func() {
+			result, err := GetIn(obj, "foo", "bar", "0", "baz")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeEquivalentTo(5))
+		})
+
+		It("errors when a non-integer is used with an array", func() {
+			result, err := GetIn(obj, "foo", "bar", "bad key")
+			Expect(result).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("invalid syntax"))
 		})
 	})
 })
