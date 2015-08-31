@@ -3,7 +3,8 @@ properties:
     ca_cert: CONSUL_CA_CERT
     agent_cert: CONSUL_AGENT_CERT
     agent_key: CONSUL_AGENT_KEY
-    encrypt_key: CONSUL_ENCRYPT
+    encrypt_keys:
+      - CONSUL_ENCRYPT
     agent:
       servers:
         lan:
