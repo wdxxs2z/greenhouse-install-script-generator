@@ -102,3 +102,16 @@ foo:
 		})
 	})
 })
+
+var _ = Describe("EscapeSpecialCharacters", func() {
+	// (, ), %, !, ^, ", <, >, &, and |.
+	It(`escapes all kinds of special characters`, func() {
+		Expect(EscapeSpecialCharacters("%hi guys%")).To(Equal("^%hi guys^%"))
+		Expect(EscapeSpecialCharacters("((hi guys)")).To(Equal("^(^(hi guys^)"))
+		Expect(EscapeSpecialCharacters(`"hello"`)).To(Equal(`^"hello^"`))
+		Expect(EscapeSpecialCharacters(`<hello>`)).To(Equal(`^<hello^>`))
+		Expect(EscapeSpecialCharacters(`&hi!`)).To(Equal(`^&hi^!`))
+		Expect(EscapeSpecialCharacters(`|hi!`)).To(Equal(`^|hi^!`))
+		Expect(EscapeSpecialCharacters(`^so meta -_-`)).To(Equal(`^^so meta -_-`))
+	})
+})

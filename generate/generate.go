@@ -74,6 +74,9 @@ func main() {
 		}
 	}
 
+	*windowsUsername = EscapeSpecialCharacters(*windowsUsername)
+	*windowsPassword = EscapeSpecialCharacters(*windowsPassword)
+
 	response := NewBoshRequest(*boshServerUrl + "/deployments")
 	defer response.Body.Close()
 
@@ -193,6 +196,14 @@ func main() {
 		args.Zone = zone
 		generateInstallScript(*outputDir, args)
 	}
+}
+
+func EscapeSpecialCharacters(str string) string {
+	specialCharacters := []string{"^", "%", "(", ")", `"`, "<", ">", "&", "!", "|"}
+	for _, c := range specialCharacters {
+		str = strings.Replace(str, c, "^"+c, -1)
+	}
+	return str
 }
 
 func FailOnError(err error) {

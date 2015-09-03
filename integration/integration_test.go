@@ -256,14 +256,12 @@ var _ = Describe("Generate", func() {
 			})
 
 			Describe("the lines of the batch script", func() {
-				var lines []string
 				var script string
 
 				BeforeEach(func() {
 					content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
 					Expect(err).NotTo(HaveOccurred())
 					script = strings.TrimSpace(string(content))
-					lines = strings.Split(string(script), "\r\n")
 				})
 
 				It("contains all the MSI parameters", func() {
@@ -308,7 +306,6 @@ var _ = Describe("Generate", func() {
 		})
 
 		Context("with awsSubnet argument", func() {
-			var lines []string
 			var script string
 
 			BeforeEach(func() {
@@ -327,11 +324,54 @@ var _ = Describe("Generate", func() {
 				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
 				Expect(err).NotTo(HaveOccurred())
 				script = strings.TrimSpace(string(content))
-				lines = strings.Split(string(script), "\r\n")
 			})
 
 			It("calls the appropriate install script", func() {
 				expectedContent := `%~dp0\install_zone2.bat`
+				Expect(script).To(Equal(expectedContent))
+			})
+		})
+
+		Describe("user provides arguments with special characters", func() {
+			var server *ghttp.Server
+			var script string
+
+			BeforeEach(func() {
+				var err error
+				outputDir, err = ioutil.TempDir("", "XXXXXXX")
+				Expect(err).NotTo(HaveOccurred())
+				server = CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
+				var session *gexec.Session
+				session = StartGeneratorWithArgs(
+					"-boshUrl", server.URL(),
+					"-outputDir", outputDir,
+					"-windowsUsername", "%admin",
+					"-windowsPassword", "pass^word",
+				)
+				Eventually(session).Should(gexec.Exit(-1))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
+			})
+
+			It("escapes them", func() {
+				Expect(server.ReceivedRequests()).To(HaveLen(2))
+				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
+  ADMIN_USERNAME=^%admin ^
+  ADMIN_PASSWORD=pass^^word ^
+  CONSUL_IPS=consul1.foo.bar ^
+  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
+  STACK=windows2012R2 ^
+  REDUNDANCY_ZONE=zone1 ^
+  LOGGREGATOR_SHARED_SECRET=secret123 ^
+  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
+  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
+  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
+  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
+  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
+  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
+  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
+				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
 				Expect(script).To(Equal(expectedContent))
 			})
 		})
