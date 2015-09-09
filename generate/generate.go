@@ -180,8 +180,7 @@ func main() {
 	syslogHostIP, _ := result.(string)
 	result, err = GetIn(manifest, "properties", "syslog_daemon_config", "port")
 	FailOnError(err)
-	portValue, _ := result.(int64)
-	syslogPort := strconv.FormatInt(portValue, 10)
+	syslogPort := fmt.Sprintf("%v", result)
 
 	args := InstallerArguments{
 		ConsulIPs:    joinedConsulIPs,
