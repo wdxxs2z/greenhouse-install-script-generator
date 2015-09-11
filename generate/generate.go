@@ -258,14 +258,6 @@ func getSubnetNetworkZone(repJobs []interface{}, subnetNetworkName string) strin
 	return ""
 }
 
-func verifySyslogArgs(ip, port string) {
-	if (ip != "" && port == "") || (ip == "" && port != "") {
-		fmt.Fprintf(os.Stderr, "Both syslogHostIP and syslogPort must be provided\n")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-}
-
 func generateInstallScript(outputDir string, args InstallerArguments) {
 	content := strings.Replace(installBatTemplate, "\n", "\r\n", -1)
 	temp := template.Must(template.New("").Parse(content))
