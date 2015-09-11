@@ -188,6 +188,76 @@ var _ = Describe("Generate", func() {
 			})
 		})
 
+		Context("when the deployment has a string port in the syslog", func() {
+			var session *gexec.Session
+			var script string
+
+			BeforeEach(func() {
+				server := CreateServer("syslog_with_string_port_manifest.yml", DefaultIndexDeployment())
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
+			})
+
+			It("contains all the MSI parameters", func() {
+				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
+  ADMIN_USERNAME=admin ^
+  ADMIN_PASSWORD=password ^
+  CONSUL_IPS=consul1.foo.bar ^
+  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
+  STACK=windows2012R2 ^
+  REDUNDANCY_ZONE=zone1 ^
+  LOGGREGATOR_SHARED_SECRET=secret123 ^
+  SYSLOG_HOST_IP=logs2.test.com ^
+  SYSLOG_PORT=11111 ^
+  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
+  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
+  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
+  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
+  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
+  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
+  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
+				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+				Expect(script).To(Equal(expectedContent))
+			})
+		})
+
+		Context("when the deployment has a null address and port in the syslog", func() {
+			var session *gexec.Session
+			var script string
+
+			BeforeEach(func() {
+				server := CreateServer("syslog_with_null_address_and_port.yml", DefaultIndexDeployment())
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
+			})
+
+			It("contains all the MSI parameters", func() {
+				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
+  ADMIN_USERNAME=admin ^
+  ADMIN_PASSWORD=password ^
+  CONSUL_IPS=consul1.foo.bar ^
+  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
+  STACK=windows2012R2 ^
+  REDUNDANCY_ZONE=zone1 ^
+  LOGGREGATOR_SHARED_SECRET=secret123 ^
+  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
+  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
+  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
+  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
+  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
+  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
+  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
+				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+				Expect(script).To(Equal(expectedContent))
+			})
+		})
+
 		Context("when the server returns a one zone manifest", func() {
 			var server *ghttp.Server
 
