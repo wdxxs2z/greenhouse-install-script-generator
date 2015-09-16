@@ -32,9 +32,6 @@ const (
   LOGGREGATOR_SHARED_SECRET={{.SharedSecret}} ^{{ if .SyslogHostIP }}
   SYSLOG_HOST_IP={{.SyslogHostIP}} ^
   SYSLOG_PORT={{.SyslogPort}} ^{{ end }}
-  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
-  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
-  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
   CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
@@ -110,13 +107,10 @@ func main() {
 	candiedyaml.NewDecoder(buf).Decode(&manifest)
 
 	for key, filename := range map[string]string{
-		"properties.diego.etcd.client_cert": "etcd_client.crt",
-		"properties.diego.etcd.client_key":  "etcd_client.key",
-		"properties.diego.etcd.ca_cert":     "etcd_ca.crt",
-		"properties.consul.agent_cert":      "consul_agent.crt",
-		"properties.consul.agent_key":       "consul_agent.key",
-		"properties.consul.ca_cert":         "consul_ca.crt",
-		"properties.consul.encrypt_keys.0":  "consul_encrypt.key",
+		"properties.consul.agent_cert":     "consul_agent.crt",
+		"properties.consul.agent_key":      "consul_agent.key",
+		"properties.consul.ca_cert":        "consul_ca.crt",
+		"properties.consul.encrypt_keys.0": "consul_encrypt.key",
 	} {
 		err = extractCert(manifest, *outputDir, filename, key)
 		if err != nil {

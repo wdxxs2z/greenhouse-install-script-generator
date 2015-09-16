@@ -176,9 +176,6 @@ var _ = Describe("Generate", func() {
   LOGGREGATOR_SHARED_SECRET=secret123 ^
   SYSLOG_HOST_IP=logs2.test.com ^
   SYSLOG_PORT=11111 ^
-  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
-  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
-  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
   CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
@@ -212,9 +209,6 @@ var _ = Describe("Generate", func() {
   LOGGREGATOR_SHARED_SECRET=secret123 ^
   SYSLOG_HOST_IP=logs2.test.com ^
   SYSLOG_PORT=11111 ^
-  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
-  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
-  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
   CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
@@ -246,9 +240,6 @@ var _ = Describe("Generate", func() {
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE=zone1 ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
-  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
-  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
-  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
   CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
@@ -270,26 +261,6 @@ var _ = Describe("Generate", func() {
 
 			It("sends get requests to get the deployments", func() {
 				Expect(server.ReceivedRequests()).To(HaveLen(2))
-			})
-
-			Context("etcd files", func() {
-				It("generates the certificate authority cert", func() {
-					cert, err := ioutil.ReadFile(path.Join(outputDir, "etcd_ca.crt"))
-					Expect(err).NotTo(HaveOccurred())
-					Expect(cert).To(BeEquivalentTo("ETCD_CA_CERT"))
-				})
-
-				It("generates the client cert", func() {
-					cert, err := ioutil.ReadFile(path.Join(outputDir, "etcd_client.crt"))
-					Expect(err).NotTo(HaveOccurred())
-					Expect(cert).To(BeEquivalentTo("ETCD_CLIENT_CERT"))
-				})
-
-				It("generates the client key", func() {
-					cert, err := ioutil.ReadFile(path.Join(outputDir, "etcd_client.key"))
-					Expect(err).NotTo(HaveOccurred())
-					Expect(cert).To(BeEquivalentTo("ETCD_CLIENT_KEY"))
-				})
 			})
 
 			Context("consul files", func() {
@@ -343,9 +314,6 @@ var _ = Describe("Generate", func() {
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE=zone1 ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
-  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
-  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
-  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
   CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
@@ -434,9 +402,6 @@ var _ = Describe("Generate", func() {
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE=zone1 ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
-  ETCD_CA_FILE=%~dp0\etcd_ca.crt ^
-  ETCD_CERT_FILE=%~dp0\etcd_client.crt ^
-  ETCD_KEY_FILE=%~dp0\etcd_client.key ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
   CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
@@ -544,20 +509,6 @@ var _ = Describe("Generate", func() {
 
 				Eventually(session).Should(gexec.Exit(1))
 				Expect(session.Err).Should(gbytes.Say("Failed to find zone for subnet: subnet-neverfind"))
-			})
-		})
-
-		Context("when the deployment has no etcd certs", func() {
-			var session *gexec.Session
-
-			BeforeEach(func() {
-				server := CreateServer("no_etcd_cert_manifest.yml", DefaultIndexDeployment())
-				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(1))
-			})
-
-			It("displays the reponse error to the user", func() {
-				Expect(session.Err).Should(gbytes.Say("Failed to extract cert from deployment"))
 			})
 		})
 
