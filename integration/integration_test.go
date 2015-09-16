@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/cloudfoundry-incubator/greenhouse-install-script-generator/models"
@@ -160,7 +159,7 @@ var _ = Describe("Generate", func() {
 				server := CreateServer("syslog_manifest.yml", DefaultIndexDeployment())
 				session, outputDir = StartGeneratorWithURL(server.URL())
 				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
 				Expect(err).NotTo(HaveOccurred())
 				script = strings.TrimSpace(string(content))
 			})
@@ -172,7 +171,7 @@ var _ = Describe("Generate", func() {
   CONSUL_IPS=consul1.foo.bar ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=zone1 ^
+  REDUNDANCY_ZONE=windows ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
   SYSLOG_HOST_IP=logs2.test.com ^
   SYSLOG_PORT=11111 ^
@@ -193,7 +192,7 @@ var _ = Describe("Generate", func() {
 				server := CreateServer("syslog_with_string_port_manifest.yml", DefaultIndexDeployment())
 				session, outputDir = StartGeneratorWithURL(server.URL())
 				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
 				Expect(err).NotTo(HaveOccurred())
 				script = strings.TrimSpace(string(content))
 			})
@@ -205,7 +204,7 @@ var _ = Describe("Generate", func() {
   CONSUL_IPS=consul1.foo.bar ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=zone1 ^
+  REDUNDANCY_ZONE=windows ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
   SYSLOG_HOST_IP=logs2.test.com ^
   SYSLOG_PORT=11111 ^
@@ -226,7 +225,7 @@ var _ = Describe("Generate", func() {
 				server := CreateServer("syslog_with_null_address_and_port.yml", DefaultIndexDeployment())
 				session, outputDir = StartGeneratorWithURL(server.URL())
 				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
 				Expect(err).NotTo(HaveOccurred())
 				script = strings.TrimSpace(string(content))
 			})
@@ -238,7 +237,7 @@ var _ = Describe("Generate", func() {
   CONSUL_IPS=consul1.foo.bar ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=zone1 ^
+  REDUNDANCY_ZONE=windows ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
@@ -289,18 +288,11 @@ var _ = Describe("Generate", func() {
 				})
 			})
 
-			It("generates only one file", func() {
-				matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(matches).To(HaveLen(1))
-				Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
-			})
-
 			Describe("the lines of the batch script", func() {
 				var script string
 
 				BeforeEach(func() {
-					content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+					content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
 					Expect(err).NotTo(HaveOccurred())
 					script = strings.TrimSpace(string(content))
 				})
@@ -312,7 +304,7 @@ var _ = Describe("Generate", func() {
   CONSUL_IPS=consul1.foo.bar ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=zone1 ^
+  REDUNDANCY_ZONE=windows ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
@@ -321,52 +313,6 @@ var _ = Describe("Generate", func() {
 					expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
 					Expect(script).To(Equal(expectedContent))
 				})
-			})
-		})
-
-		Context("when the server returns a two zone manifest", func() {
-			var server *ghttp.Server
-
-			BeforeEach(func() {
-				server = CreateServer("two_zone_manifest.yml", DefaultIndexDeployment())
-				var session *gexec.Session
-				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(0))
-			})
-
-			It("generates one file per zone", func() {
-				matches, err := filepath.Glob(path.Join(outputDir, "install_*.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(matches).To(HaveLen(2))
-				Expect(path.Join(outputDir, "install_zone1.bat")).To(BeAnExistingFile())
-				Expect(path.Join(outputDir, "install_zone2.bat")).To(BeAnExistingFile())
-			})
-		})
-
-		Context("with awsSubnet argument", func() {
-			var script string
-
-			BeforeEach(func() {
-				var err error
-				outputDir, err = ioutil.TempDir("", "XXXXXXX")
-				Expect(err).NotTo(HaveOccurred())
-				server := CreateServer("two_zone_manifest.yml", DefaultIndexDeployment())
-				session := StartGeneratorWithArgs(
-					"-boshUrl", server.URL(),
-					"-outputDir", outputDir,
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-					"-awsSubnet", "subnet-deadbeef",
-				)
-				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
-			})
-
-			It("calls the appropriate install script", func() {
-				expectedContent := `%~dp0\install_zone2.bat`
-				Expect(script).To(Equal(expectedContent))
 			})
 		})
 
@@ -387,7 +333,7 @@ var _ = Describe("Generate", func() {
 					"-windowsPassword", "pass^word",
 				)
 				Eventually(session).Should(gexec.Exit(-1))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install_zone1.bat"))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
 				Expect(err).NotTo(HaveOccurred())
 				script = strings.TrimSpace(string(content))
 			})
@@ -400,7 +346,7 @@ var _ = Describe("Generate", func() {
   CONSUL_IPS=consul1.foo.bar ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=zone1 ^
+  REDUNDANCY_ZONE=windows ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
@@ -489,26 +435,6 @@ var _ = Describe("Generate", func() {
 				Eventually(session).Should(gexec.Exit(0))
 				_, err := os.Stat(nonExistingDir)
 				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
-		Context("when awsSubnet is provided but the deployment has no matching subnet", func() {
-			var session *gexec.Session
-
-			It("outputs an error message to console", func() {
-				outputDir, err := ioutil.TempDir("", "XXXXXXX")
-				Expect(err).NotTo(HaveOccurred())
-				server := CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
-				session = StartGeneratorWithArgs(
-					"-boshUrl", server.URL(),
-					"-outputDir", outputDir,
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-					"-awsSubnet", "subnet-neverfind",
-				)
-
-				Eventually(session).Should(gexec.Exit(1))
-				Expect(session.Err).Should(gbytes.Say("Failed to find zone for subnet: subnet-neverfind"))
 			})
 		})
 
