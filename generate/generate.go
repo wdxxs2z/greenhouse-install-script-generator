@@ -55,7 +55,6 @@ func main() {
 	outputDir := flag.String("outputDir", "", "Output directory (/tmp/scripts)")
 	windowsUsername := flag.String("windowsUsername", "", "Windows username")
 	windowsPassword := flag.String("windowsPassword", "", "Windows password")
-	awsSubnet := flag.String("awsSubnet", "", "(optional) AWS Subnet")
 
 	flag.Parse()
 	if *boshServerUrl == "" || *outputDir == "" {
@@ -132,30 +131,6 @@ func main() {
 		}
 	}
 
-	zones := map[string]struct{}{}
-	for _, job := range repJobs {
-		zone, err := GetIn(job, "properties", "diego", "rep", "zone")
-		FailOnError(err)
-
-		if zone != nil {
-			zones[zone.(string)] = struct{}{}
-		}
-	}
-
-	if *awsSubnet != "" {
-		networks, err := GetIn(manifest, "networks")
-		FailOnError(err)
-		subnetNetworkName := getSubnetNetworkName(networks.([]interface{}), *awsSubnet)
-		subnetNetworkZone := getSubnetNetworkZone(repJobs, subnetNetworkName)
-
-		if subnetNetworkZone == "" {
-			fmt.Fprintf(os.Stderr, "Failed to find zone for subnet: %v", *awsSubnet)
-			os.Exit(1)
-		}
-
-		generateInstallScriptWrapperForZone(*outputDir, subnetNetworkZone)
-	}
-
 	consuls, err := GetIn(manifest, "properties", "consul", "agent", "servers", "lan")
 	FailOnError(err)
 	consulIPs := []string{}
@@ -185,10 +160,7 @@ func main() {
 		SyslogHostIP: syslogHostIP,
 		SyslogPort:   syslogPort,
 	}
-	for zone, _ := range zones {
-		args.Zone = zone
-		generateInstallScript(*outputDir, args)
-	}
+	generateInstallScript(*outputDir, args)
 }
 
 func EscapeSpecialCharacters(str string) string {
@@ -203,17 +175,6 @@ func FailOnError(err error) {
 	if err != nil {
 		panic(err)
 	}
-}
-
-func generateInstallScriptWrapperForZone(outputDir, subnetNetworkZone string) {
-	file, err := os.OpenFile(path.Join(outputDir, "install.bat"), os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-	filenameContents := fmt.Sprintf("%%~dp0\\install_%s.bat", subnetNetworkZone)
-	file.WriteString(filenameContents)
 }
 
 func getSubnetNetworkName(networks []interface{}, awsSubnet string) string {
@@ -255,8 +216,8 @@ func getSubnetNetworkZone(repJobs []interface{}, subnetNetworkName string) strin
 func generateInstallScript(outputDir string, args InstallerArguments) {
 	content := strings.Replace(installBatTemplate, "\n", "\r\n", -1)
 	temp := template.Must(template.New("").Parse(content))
-
-	filename := fmt.Sprintf("install_%s.bat", args.Zone)
+	args.Zone = "windows"
+	filename := "install.bat"
 	file, err := os.OpenFile(path.Join(outputDir, filename), os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		log.Fatal(err)
