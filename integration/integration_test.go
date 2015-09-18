@@ -98,6 +98,23 @@ func DefaultIndexDeployment() []models.IndexDeployment {
 					Name:    "diego",
 					Version: "0.1366.0+dev.2",
 				},
+				{
+					Name:    "garden-linux",
+					Version: "0.305.0",
+				},
+			},
+		},
+		{
+			Name: "diego-vizzini",
+			Releases: []models.Release{
+				{
+					Name:    "cf",
+					Version: "213+dev.2",
+				},
+				{
+					Name:    "diego",
+					Version: "0.1366.0+dev.2",
+				},
 			},
 		},
 	}
@@ -125,6 +142,10 @@ func AmbiguousIndexDeployment() []models.IndexDeployment {
 					Name:    "diego",
 					Version: "0.1366.0+dev.2",
 				},
+				{
+					Name:    "garden-linux",
+					Version: "0.305.0",
+				},
 			},
 		},
 		{
@@ -137,6 +158,10 @@ func AmbiguousIndexDeployment() []models.IndexDeployment {
 				{
 					Name:    "diego",
 					Version: "0.1366.0+dev.2",
+				},
+				{
+					Name:    "garden-linux",
+					Version: "0.305.0",
 				},
 			},
 		},

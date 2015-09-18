@@ -254,7 +254,7 @@ func GetDiegoDeployment(deployments []models.IndexDeployment) int {
 			releases[rel.Name] = true
 		}
 
-		if releases["cf"] && releases["diego"] {
+		if releases["cf"] && releases["diego"] && releases["garden-linux"] {
 			if deploymentIndex != -1 {
 				return -1
 			}
