@@ -10,13 +10,12 @@ properties:
   loggregator_endpoint:
     shared_secret: secret123
   diego:
-    bbs:
-      ca_cert: BBS_CA_CERT
-      server_cert: BBS_SERVER_CERT
-      server_key: BBS_SERVER_KEY
-      client_cert: BBS_CLIENT_CERT
-      client_key: BBS_CLIENT_KEY
-      require_ssl: true
+    rep:
+      bbs:
+        ca_cert: BBS_CA_CERT
+        client_cert: BBS_CLIENT_CERT
+        client_key: BBS_CLIENT_KEY
+        require_ssl: true
 
 jobs:
   - properties:

@@ -156,7 +156,7 @@ func main() {
 	syslogPort := fmt.Sprintf("%v", result)
 
 	var bbsRequireSsl bool
-	result, _ = GetIn(manifest, "properties", "diego", "bbs", "require_ssl")
+	result, _ = GetIn(manifest, "properties", "diego", "rep", "bbs", "require_ssl")
 	if result == nil {
 		bbsRequireSsl = false
 	} else {
@@ -182,9 +182,9 @@ func main() {
 
 func extractBbsKeyAndCert(manifest interface{}, outputDir string) {
 	for key, filename := range map[string]string{
-		"properties.diego.bbs.client_cert": "bbs_client.crt",
-		"properties.diego.bbs.client_key":  "bbs_client.key",
-		"properties.diego.bbs.ca_cert":     "bbs_ca.crt",
+		"properties.diego.rep.bbs.client_cert": "bbs_client.crt",
+		"properties.diego.rep.bbs.client_key":  "bbs_client.key",
+		"properties.diego.rep.bbs.ca_cert":     "bbs_ca.crt",
 	} {
 		err := extractCert(manifest, outputDir, filename, key)
 		if err != nil {
