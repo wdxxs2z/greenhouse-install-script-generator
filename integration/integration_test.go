@@ -193,6 +193,9 @@ var _ = Describe("Generate", func() {
 				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
   ADMIN_USERNAME=admin ^
   ADMIN_PASSWORD=password ^
+  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
+  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
+  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^
   CONSUL_IPS=consul1.foo.bar ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
@@ -226,6 +229,9 @@ var _ = Describe("Generate", func() {
 				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
   ADMIN_USERNAME=admin ^
   ADMIN_PASSWORD=password ^
+  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
+  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
+  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^
   CONSUL_IPS=consul1.foo.bar ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
@@ -259,6 +265,9 @@ var _ = Describe("Generate", func() {
 				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
   ADMIN_USERNAME=admin ^
   ADMIN_PASSWORD=password ^
+  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
+  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
+  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^
   CONSUL_IPS=consul1.foo.bar ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
@@ -326,6 +335,9 @@ var _ = Describe("Generate", func() {
 					expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
   ADMIN_USERNAME=admin ^
   ADMIN_PASSWORD=password ^
+  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
+  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
+  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^
   CONSUL_IPS=consul1.foo.bar ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
@@ -368,6 +380,9 @@ var _ = Describe("Generate", func() {
 				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
   ADMIN_USERNAME=^%admin ^
   ADMIN_PASSWORD=pass^^word ^
+  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
+  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
+  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^
   CONSUL_IPS=consul1.foo.bar ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
@@ -381,6 +396,38 @@ var _ = Describe("Generate", func() {
 				Expect(script).To(Equal(expectedContent))
 			})
 		})
+
+		Context("when the deployment has no bbs certs", func() {
+			var session *gexec.Session
+			var script string
+
+			BeforeEach(func() {
+				server := CreateServer("no_bbs_cert_manifest.yml", DefaultIndexDeployment())
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
+			})
+
+			It("does not contain bbs parameters", func() {
+				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
+  ADMIN_USERNAME=admin ^
+  ADMIN_PASSWORD=password ^
+  CONSUL_IPS=consul1.foo.bar ^
+  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
+  STACK=windows2012R2 ^
+  REDUNDANCY_ZONE=windows ^
+  LOGGREGATOR_SHARED_SECRET=secret123 ^
+  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
+  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
+  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
+  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
+				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+				Expect(script).To(Equal(expectedContent))
+			})
+		})
+
 	})
 
 	Describe("Failure scenarios", func() {

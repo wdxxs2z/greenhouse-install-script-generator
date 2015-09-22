@@ -14,17 +14,6 @@ properties:
       - etcd1.foo.bar
   loggregator_endpoint:
     shared_secret: secret123
-  diego:
-    bbs:
-      ca_cert: BBS_CA_CERT
-      server_cert: BBS_SERVER_CERT
-      server_key: BBS_SERVER_KEY
-      client_cert: BBS_CLIENT_CERT
-      client_key: BBS_CLIENT_KEY
-      require_ssl: true
-  syslog_daemon_config:
-    address: ~
-    port: ~
 
 jobs:
   - properties:
@@ -32,11 +21,3 @@ jobs:
         rep:
           zone:
             zone1
-    networks:
-      - name: diego1
-
-networks:
-  - name: diego1
-    subnets:
-      - cloud_properties:
-          subnet: subnet-8a204ed3

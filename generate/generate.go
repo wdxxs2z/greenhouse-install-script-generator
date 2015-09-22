@@ -24,7 +24,10 @@ import (
 const (
 	installBatTemplate = `msiexec /passive /norestart /i %~dp0\diego.msi ^
   ADMIN_USERNAME={{.Username}} ^
-  ADMIN_PASSWORD={{.Password}} ^
+  ADMIN_PASSWORD={{.Password}} ^{{ if .BbsRequireSsl }}
+  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
+  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
+  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^{{ end }}
   CONSUL_IPS={{.ConsulIPs}} ^
   CF_ETCD_CLUSTER=http://{{.EtcdCluster}}:4001 ^
   STACK=windows2012R2 ^
@@ -40,14 +43,15 @@ const (
 )
 
 type InstallerArguments struct {
-	ConsulIPs    string
-	EtcdCluster  string
-	Zone         string
-	SharedSecret string
-	Username     string
-	Password     string
-	SyslogHostIP string
-	SyslogPort   string
+	ConsulIPs     string
+	EtcdCluster   string
+	Zone          string
+	SharedSecret  string
+	Username      string
+	Password      string
+	SyslogHostIP  string
+	SyslogPort    string
+	BbsRequireSsl bool
 }
 
 func main() {
@@ -151,16 +155,43 @@ func main() {
 	FailOnError(err)
 	syslogPort := fmt.Sprintf("%v", result)
 
+	var bbsRequireSsl bool
+	result, _ = GetIn(manifest, "properties", "diego", "bbs", "require_ssl")
+	if result == nil {
+		bbsRequireSsl = false
+	} else {
+		bbsRequireSsl = result.(bool)
+	}
+
+	if bbsRequireSsl {
+		extractBbsKeyAndCert(manifest, *outputDir)
+	}
+
 	args := InstallerArguments{
-		ConsulIPs:    joinedConsulIPs,
-		EtcdCluster:  etcdCluster,
-		SharedSecret: sharedSecret,
-		Username:     *windowsUsername,
-		Password:     *windowsPassword,
-		SyslogHostIP: syslogHostIP,
-		SyslogPort:   syslogPort,
+		ConsulIPs:     joinedConsulIPs,
+		EtcdCluster:   etcdCluster,
+		SharedSecret:  sharedSecret,
+		Username:      *windowsUsername,
+		Password:      *windowsPassword,
+		SyslogHostIP:  syslogHostIP,
+		SyslogPort:    syslogPort,
+		BbsRequireSsl: bbsRequireSsl,
 	}
 	generateInstallScript(*outputDir, args)
+}
+
+func extractBbsKeyAndCert(manifest interface{}, outputDir string) {
+	for key, filename := range map[string]string{
+		"properties.diego.bbs.client_cert": "bbs_client.crt",
+		"properties.diego.bbs.client_key":  "bbs_client.key",
+		"properties.diego.bbs.ca_cert":     "bbs_ca.crt",
+	} {
+		err := extractCert(manifest, outputDir, filename, key)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v", err)
+			os.Exit(1)
+		}
+	}
 }
 
 func EscapeSpecialCharacters(str string) string {

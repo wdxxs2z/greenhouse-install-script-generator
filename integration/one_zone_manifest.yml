@@ -15,10 +15,13 @@ properties:
   loggregator_endpoint:
     shared_secret: secret123
   diego:
-    etcd:
-      ca_cert: ETCD_CA_CERT
-      client_cert: ETCD_CLIENT_CERT
-      client_key: ETCD_CLIENT_KEY
+    bbs:
+      ca_cert: BBS_CA_CERT
+      server_cert: BBS_SERVER_CERT
+      server_key: BBS_SERVER_KEY
+      client_cert: BBS_CLIENT_CERT
+      client_key: BBS_CLIENT_KEY
+      require_ssl: true
 
 jobs:
   - properties:
