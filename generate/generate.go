@@ -22,9 +22,7 @@ import (
 )
 
 const (
-	installBatTemplate = `msiexec /passive /norestart /i %~dp0\diego.msi ^
-  ADMIN_USERNAME={{.Username}} ^
-  ADMIN_PASSWORD={{.Password}} ^{{ if .BbsRequireSsl }}
+	installBatTemplate = `msiexec /passive /norestart /i %~dp0\DiegoWindows.msi ^{{ if .BbsRequireSsl }}
   BBS_CA_FILE=%~dp0\bbs_ca.crt ^
   BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
   BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^{{ end }}
@@ -39,20 +37,13 @@ const (
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
   CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
   CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key
-  `
-)
 
-type InstallerArguments struct {
-	ConsulIPs     string
-	EtcdCluster   string
-	Zone          string
-	SharedSecret  string
-	Username      string
-	Password      string
-	SyslogHostIP  string
-	SyslogPort    string
-	BbsRequireSsl bool
-}
+msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
+  ADMIN_USERNAME={{.Username}} ^
+  ADMIN_PASSWORD={{.Password}}{{ if .SyslogHostIP }}^
+  SYSLOG_HOST_IP={{.SyslogHostIP}} ^
+  SYSLOG_PORT={{.SyslogPort}}{{ end }}`
+)
 
 func main() {
 	boshServerUrl := flag.String("boshUrl", "", "Bosh URL (https://admin:admin@bosh.example:25555)")
@@ -167,7 +158,7 @@ func main() {
 		extractBbsKeyAndCert(manifest, *outputDir)
 	}
 
-	args := InstallerArguments{
+	args := models.InstallerArguments{
 		ConsulIPs:     joinedConsulIPs,
 		EtcdCluster:   etcdCluster,
 		SharedSecret:  sharedSecret,
@@ -244,7 +235,7 @@ func getSubnetNetworkZone(repJobs []interface{}, subnetNetworkName string) strin
 	return ""
 }
 
-func generateInstallScript(outputDir string, args InstallerArguments) {
+func generateInstallScript(outputDir string, args models.InstallerArguments) {
 	content := strings.Replace(installBatTemplate, "\n", "\r\n", -1)
 	temp := template.Must(template.New("").Parse(content))
 	args.Zone = "windows"

@@ -13,3 +13,15 @@ type IndexDeployment struct {
 type ShowDeployment struct {
 	Manifest string `json:"manifest"`
 }
+
+type InstallerArguments struct {
+	ConsulIPs     string
+	EtcdCluster   string
+	Zone          string
+	SharedSecret  string
+	Username      string
+	Password      string
+	SyslogHostIP  string
+	SyslogPort    string
+	BbsRequireSsl bool
+}

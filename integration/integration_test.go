@@ -1,11 +1,13 @@
 package integration_test
 
 import (
+	"bytes"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
 	"strings"
+	"text/template"
 
 	"github.com/cloudfoundry-incubator/greenhouse-install-script-generator/models"
 	. "github.com/onsi/ginkgo"
@@ -168,6 +170,38 @@ func AmbiguousIndexDeployment() []models.IndexDeployment {
 	}
 }
 
+func ExpectedContent(args models.InstallerArguments) string {
+	content := `msiexec /passive /norestart /i %~dp0\DiegoWindows.msi ^{{ if .BbsRequireSsl }}
+  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
+  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
+  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^{{ end }}
+  CONSUL_IPS=consul1.foo.bar ^
+  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
+  STACK=windows2012R2 ^
+  REDUNDANCY_ZONE=windows ^
+  LOGGREGATOR_SHARED_SECRET=secret123 ^{{ if .SyslogHostIP }}
+  SYSLOG_HOST_IP=logs2.test.com ^
+  SYSLOG_PORT=11111 ^{{ end }}
+  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
+  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
+  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
+  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key
+
+msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
+  ADMIN_USERNAME={{.Username}} ^
+  ADMIN_PASSWORD={{.Password}}{{ if .SyslogHostIP }}^
+  SYSLOG_HOST_IP=logs2.test.com ^
+  SYSLOG_PORT=11111{{ end }}`
+	content = strings.Replace(content, "\n", "\r\n", -1)
+	temp := template.Must(template.New("").Parse(content))
+	buf := bytes.NewBufferString("")
+	err := temp.Execute(buf, args)
+	if err != nil {
+		panic(err)
+	}
+	return buf.String()
+}
+
 var _ = Describe("Generate", func() {
 	var outputDir string
 
@@ -190,24 +224,12 @@ var _ = Describe("Generate", func() {
 			})
 
 			It("contains all the MSI parameters", func() {
-				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
-  ADMIN_USERNAME=admin ^
-  ADMIN_PASSWORD=password ^
-  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
-  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
-  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^
-  CONSUL_IPS=consul1.foo.bar ^
-  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
-  STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=windows ^
-  LOGGREGATOR_SHARED_SECRET=secret123 ^
-  SYSLOG_HOST_IP=logs2.test.com ^
-  SYSLOG_PORT=11111 ^
-  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
-  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
-  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
-  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
-				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+				expectedContent := ExpectedContent(models.InstallerArguments{
+					SyslogHostIP:  "logs2.test.com",
+					BbsRequireSsl: true,
+					Username:      "admin",
+					Password:      "password",
+				})
 				Expect(script).To(Equal(expectedContent))
 			})
 		})
@@ -226,24 +248,12 @@ var _ = Describe("Generate", func() {
 			})
 
 			It("contains all the MSI parameters", func() {
-				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
-  ADMIN_USERNAME=admin ^
-  ADMIN_PASSWORD=password ^
-  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
-  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
-  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^
-  CONSUL_IPS=consul1.foo.bar ^
-  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
-  STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=windows ^
-  LOGGREGATOR_SHARED_SECRET=secret123 ^
-  SYSLOG_HOST_IP=logs2.test.com ^
-  SYSLOG_PORT=11111 ^
-  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
-  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
-  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
-  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
-				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+				expectedContent := ExpectedContent(models.InstallerArguments{
+					SyslogHostIP:  "logs2.test.com",
+					BbsRequireSsl: true,
+					Username:      "admin",
+					Password:      "password",
+				})
 				Expect(script).To(Equal(expectedContent))
 			})
 		})
@@ -262,22 +272,11 @@ var _ = Describe("Generate", func() {
 			})
 
 			It("contains all the MSI parameters", func() {
-				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
-  ADMIN_USERNAME=admin ^
-  ADMIN_PASSWORD=password ^
-  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
-  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
-  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^
-  CONSUL_IPS=consul1.foo.bar ^
-  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
-  STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=windows ^
-  LOGGREGATOR_SHARED_SECRET=secret123 ^
-  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
-  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
-  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
-  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
-				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+				expectedContent := ExpectedContent(models.InstallerArguments{
+					BbsRequireSsl: true,
+					Username:      "admin",
+					Password:      "password",
+				})
 				Expect(script).To(Equal(expectedContent))
 			})
 		})
@@ -332,22 +331,11 @@ var _ = Describe("Generate", func() {
 				})
 
 				It("contains all the MSI parameters", func() {
-					expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
-  ADMIN_USERNAME=admin ^
-  ADMIN_PASSWORD=password ^
-  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
-  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
-  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^
-  CONSUL_IPS=consul1.foo.bar ^
-  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
-  STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=windows ^
-  LOGGREGATOR_SHARED_SECRET=secret123 ^
-  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
-  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
-  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
-  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
-					expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+					expectedContent := ExpectedContent(models.InstallerArguments{
+						BbsRequireSsl: true,
+						Username:      "admin",
+						Password:      "password",
+					})
 					Expect(script).To(Equal(expectedContent))
 				})
 			})
@@ -377,22 +365,11 @@ var _ = Describe("Generate", func() {
 
 			It("escapes them", func() {
 				Expect(server.ReceivedRequests()).To(HaveLen(2))
-				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
-  ADMIN_USERNAME=^%admin ^
-  ADMIN_PASSWORD=pass^^word ^
-  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
-  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
-  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^
-  CONSUL_IPS=consul1.foo.bar ^
-  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
-  STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=windows ^
-  LOGGREGATOR_SHARED_SECRET=secret123 ^
-  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
-  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
-  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
-  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
-				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+				expectedContent := ExpectedContent(models.InstallerArguments{
+					BbsRequireSsl: true,
+					Username:      "^%admin",
+					Password:      "pass^^word",
+				})
 				Expect(script).To(Equal(expectedContent))
 			})
 		})
@@ -411,19 +388,11 @@ var _ = Describe("Generate", func() {
 			})
 
 			It("does not contain bbs parameters", func() {
-				expectedContent := `msiexec /passive /norestart /i %~dp0\diego.msi ^
-  ADMIN_USERNAME=admin ^
-  ADMIN_PASSWORD=password ^
-  CONSUL_IPS=consul1.foo.bar ^
-  CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
-  STACK=windows2012R2 ^
-  REDUNDANCY_ZONE=windows ^
-  LOGGREGATOR_SHARED_SECRET=secret123 ^
-  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
-  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
-  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
-  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key`
-				expectedContent = strings.Replace(expectedContent, "\n", "\r\n", -1)
+				expectedContent := ExpectedContent(models.InstallerArguments{
+					BbsRequireSsl: false,
+					Username:      "admin",
+					Password:      "password",
+				})
 				Expect(script).To(Equal(expectedContent))
 			})
 		})
