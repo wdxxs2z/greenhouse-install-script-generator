@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/cloudfoundry-incubator/candiedyaml"
-	"github.com/cloudfoundry-incubator/greenhouse-install-script-generator/models"
+	"models"
 )
 
 const (

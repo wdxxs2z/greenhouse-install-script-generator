@@ -4,7 +4,7 @@ import (
 	"bytes"
 
 	"github.com/cloudfoundry-incubator/candiedyaml"
-	. "github.com/cloudfoundry-incubator/greenhouse-install-script-generator/generate"
+	. "generate"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
