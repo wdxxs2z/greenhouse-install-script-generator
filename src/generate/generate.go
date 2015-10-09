@@ -133,7 +133,7 @@ func main() {
 		consulIPs = append(consulIPs, c.(string))
 	}
 	joinedConsulIPs := strings.Join(consulIPs, ",")
-	result, err = GetIn(manifest, "properties", "etcd", "machines", 0)
+	result, err = GetIn(manifest, "properties", "loggregator", "etcd", "machines", 0)
 	FailOnError(err)
 	etcdCluster := result.(string)
 	result, err = GetIn(manifest, "properties", "loggregator_endpoint", "shared_secret")
