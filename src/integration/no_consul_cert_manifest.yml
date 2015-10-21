@@ -1,5 +1,6 @@
 properties:
   consul:
+    require_ssl: false
     agent:
       servers:
         lan:

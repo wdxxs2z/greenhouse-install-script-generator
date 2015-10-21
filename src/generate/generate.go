@@ -17,8 +17,9 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/cloudfoundry-incubator/candiedyaml"
 	"models"
+
+	"github.com/cloudfoundry-incubator/candiedyaml"
 )
 
 const (
@@ -32,11 +33,11 @@ const (
   REDUNDANCY_ZONE={{.Zone}} ^
   LOGGREGATOR_SHARED_SECRET={{.SharedSecret}} ^{{ if .SyslogHostIP }}
   SYSLOG_HOST_IP={{.SyslogHostIP}} ^
-  SYSLOG_PORT={{.SyslogPort}} ^{{ end }}
+  SYSLOG_PORT={{.SyslogPort}} {{ end }}{{if .ConsulRequireSSL }}^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
   CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
-  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key
+  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key{{end}}
 
 msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
   ADMIN_USERNAME={{.Username}} ^
@@ -100,16 +101,25 @@ func main() {
 	var manifest interface{}
 	candiedyaml.NewDecoder(buf).Decode(&manifest)
 
-	for key, filename := range map[string]string{
-		"properties.consul.agent_cert":     "consul_agent.crt",
-		"properties.consul.agent_key":      "consul_agent.key",
-		"properties.consul.ca_cert":        "consul_ca.crt",
-		"properties.consul.encrypt_keys.0": "consul_encrypt.key",
-	} {
-		err = extractCert(manifest, *outputDir, filename, key)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v", err)
-			os.Exit(1)
+	requireSSL, err := GetIn(manifest, "properties", "consul", "require_ssl")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", err)
+		os.Exit(1)
+	}
+
+	consulRequireSSL, ok := requireSSL.(bool)
+	if ok && consulRequireSSL {
+		for key, filename := range map[string]string{
+			"properties.consul.agent_cert":     "consul_agent.crt",
+			"properties.consul.agent_key":      "consul_agent.key",
+			"properties.consul.ca_cert":        "consul_ca.crt",
+			"properties.consul.encrypt_keys.0": "consul_encrypt.key",
+		} {
+			err = extractCert(manifest, *outputDir, filename, key)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%v", err)
+				os.Exit(1)
+			}
 		}
 	}
 
@@ -159,14 +169,15 @@ func main() {
 	}
 
 	args := models.InstallerArguments{
-		ConsulIPs:     joinedConsulIPs,
-		EtcdCluster:   etcdCluster,
-		SharedSecret:  sharedSecret,
-		Username:      *windowsUsername,
-		Password:      *windowsPassword,
-		SyslogHostIP:  syslogHostIP,
-		SyslogPort:    syslogPort,
-		BbsRequireSsl: bbsRequireSsl,
+		ConsulRequireSSL: consulRequireSSL,
+		ConsulIPs:        joinedConsulIPs,
+		EtcdCluster:      etcdCluster,
+		SharedSecret:     sharedSecret,
+		Username:         *windowsUsername,
+		Password:         *windowsPassword,
+		SyslogHostIP:     syslogHostIP,
+		SyslogPort:       syslogPort,
+		BbsRequireSsl:    bbsRequireSsl,
 	}
 	generateInstallScript(*outputDir, args)
 }

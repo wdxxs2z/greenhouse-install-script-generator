@@ -10,6 +10,7 @@ import (
 	"text/template"
 
 	"models"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -181,11 +182,11 @@ func ExpectedContent(args models.InstallerArguments) string {
   REDUNDANCY_ZONE=windows ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^{{ if .SyslogHostIP }}
   SYSLOG_HOST_IP=logs2.test.com ^
-  SYSLOG_PORT=11111 ^{{ end }}
+  SYSLOG_PORT=11111 {{ end }}{{ if .ConsulRequireSSL }}^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
   CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
-  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key
+  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key{{end}}
 
 msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
   ADMIN_USERNAME={{.Username}} ^
@@ -225,10 +226,11 @@ var _ = Describe("Generate", func() {
 
 			It("contains all the MSI parameters", func() {
 				expectedContent := ExpectedContent(models.InstallerArguments{
-					SyslogHostIP:  "logs2.test.com",
-					BbsRequireSsl: true,
-					Username:      "admin",
-					Password:      "password",
+					ConsulRequireSSL: true,
+					SyslogHostIP:     "logs2.test.com",
+					BbsRequireSsl:    true,
+					Username:         "admin",
+					Password:         "password",
 				})
 				Expect(script).To(Equal(expectedContent))
 			})
@@ -249,10 +251,11 @@ var _ = Describe("Generate", func() {
 
 			It("contains all the MSI parameters", func() {
 				expectedContent := ExpectedContent(models.InstallerArguments{
-					SyslogHostIP:  "logs2.test.com",
-					BbsRequireSsl: true,
-					Username:      "admin",
-					Password:      "password",
+					ConsulRequireSSL: true,
+					SyslogHostIP:     "logs2.test.com",
+					BbsRequireSsl:    true,
+					Username:         "admin",
+					Password:         "password",
 				})
 				Expect(script).To(Equal(expectedContent))
 			})
@@ -273,9 +276,10 @@ var _ = Describe("Generate", func() {
 
 			It("contains all the MSI parameters", func() {
 				expectedContent := ExpectedContent(models.InstallerArguments{
-					BbsRequireSsl: true,
-					Username:      "admin",
-					Password:      "password",
+					ConsulRequireSSL: true,
+					BbsRequireSsl:    true,
+					Username:         "admin",
+					Password:         "password",
 				})
 				Expect(script).To(Equal(expectedContent))
 			})
@@ -332,9 +336,10 @@ var _ = Describe("Generate", func() {
 
 				It("contains all the MSI parameters", func() {
 					expectedContent := ExpectedContent(models.InstallerArguments{
-						BbsRequireSsl: true,
-						Username:      "admin",
-						Password:      "password",
+						ConsulRequireSSL: true,
+						BbsRequireSsl:    true,
+						Username:         "admin",
+						Password:         "password",
 					})
 					Expect(script).To(Equal(expectedContent))
 				})
@@ -366,9 +371,10 @@ var _ = Describe("Generate", func() {
 			It("escapes them", func() {
 				Expect(server.ReceivedRequests()).To(HaveLen(2))
 				expectedContent := ExpectedContent(models.InstallerArguments{
-					BbsRequireSsl: true,
-					Username:      "^%admin",
-					Password:      "pass^^word",
+					ConsulRequireSSL: true,
+					BbsRequireSsl:    true,
+					Username:         "^%admin",
+					Password:         "pass^^word",
 				})
 				Expect(script).To(Equal(expectedContent))
 			})
@@ -389,9 +395,10 @@ var _ = Describe("Generate", func() {
 
 			It("does not contain bbs parameters", func() {
 				expectedContent := ExpectedContent(models.InstallerArguments{
-					BbsRequireSsl: false,
-					Username:      "admin",
-					Password:      "password",
+					ConsulRequireSSL: true,
+					BbsRequireSsl:    false,
+					Username:         "admin",
+					Password:         "password",
 				})
 				Expect(script).To(Equal(expectedContent))
 			})
@@ -481,15 +488,25 @@ var _ = Describe("Generate", func() {
 
 		Context("when the deployment has no consul certs", func() {
 			var session *gexec.Session
+			var script string
 
 			BeforeEach(func() {
 				server := CreateServer("no_consul_cert_manifest.yml", DefaultIndexDeployment())
 				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(1))
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
 			})
 
-			It("displays the reponse error to the user", func() {
-				Expect(session.Err).Should(gbytes.Say("Failed to extract cert from deployment"))
+			It("does not contain consul parameters", func() {
+				expectedContent := ExpectedContent(models.InstallerArguments{
+					Username:         "admin",
+					Password:         "password",
+					ConsulRequireSSL: false,
+					BbsRequireSsl:    true,
+				})
+				Expect(script).To(Equal(expectedContent))
 			})
 		})
 	})

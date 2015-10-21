@@ -15,13 +15,14 @@ type ShowDeployment struct {
 }
 
 type InstallerArguments struct {
-	ConsulIPs     string
-	EtcdCluster   string
-	Zone          string
-	SharedSecret  string
-	Username      string
-	Password      string
-	SyslogHostIP  string
-	SyslogPort    string
-	BbsRequireSsl bool
+	ConsulRequireSSL bool
+	ConsulIPs        string
+	EtcdCluster      string
+	Zone             string
+	SharedSecret     string
+	Username         string
+	Password         string
+	SyslogHostIP     string
+	SyslogPort       string
+	BbsRequireSsl    bool
 }
