@@ -3,8 +3,8 @@ package main_test
 import (
 	"bytes"
 
-	"github.com/cloudfoundry-incubator/candiedyaml"
 	. "generate"
+	"github.com/cloudfoundry-incubator/candiedyaml"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
