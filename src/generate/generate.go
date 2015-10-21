@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -12,14 +11,13 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"text/template"
 	"time"
 
-	"models"
+	"gopkg.in/yaml.v2"
 
-	"github.com/cloudfoundry-incubator/candiedyaml"
+	"models"
 )
 
 const (
@@ -98,100 +96,127 @@ func main() {
 	deployment := models.ShowDeployment{}
 	json.NewDecoder(response.Body).Decode(&deployment)
 	buf := bytes.NewBufferString(deployment.Manifest)
-	var manifest interface{}
-	candiedyaml.NewDecoder(buf).Decode(&manifest)
-
-	requireSSL, err := GetIn(manifest, "properties", "consul", "require_ssl")
+	var manifest models.Manifest
+	err = yaml.Unmarshal(buf.Bytes(), &manifest)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v", err)
-		os.Exit(1)
-	}
-
-	consulRequireSSL, ok := requireSSL.(bool)
-	if ok && consulRequireSSL {
-		for key, filename := range map[string]string{
-			"properties.consul.agent_cert":     "consul_agent.crt",
-			"properties.consul.agent_key":      "consul_agent.key",
-			"properties.consul.ca_cert":        "consul_ca.crt",
-			"properties.consul.encrypt_keys.0": "consul_encrypt.key",
-		} {
-			err = extractCert(manifest, *outputDir, filename, key)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%v", err)
-				os.Exit(1)
-			}
-		}
-	}
-
-	result, err := GetIn(manifest, "jobs")
-	FailOnError(err)
-	jobs := result.([]interface{})
-	var repJobs []interface{}
-
-	for _, job := range jobs {
-		jopHashRep, err := GetIn(job, "properties", "diego", "rep")
 		FailOnError(err)
-		if jopHashRep != nil {
-			repJobs = append(repJobs, job)
-		}
-	}
-
-	consuls, err := GetIn(manifest, "properties", "consul", "agent", "servers", "lan")
-	FailOnError(err)
-	consulIPs := []string{}
-	for _, c := range consuls.([]interface{}) {
-		consulIPs = append(consulIPs, c.(string))
-	}
-	joinedConsulIPs := strings.Join(consulIPs, ",")
-	result, err = GetIn(manifest, "properties", "loggregator", "etcd", "machines", 0)
-	FailOnError(err)
-	etcdCluster := result.(string)
-	result, err = GetIn(manifest, "properties", "loggregator_endpoint", "shared_secret")
-	FailOnError(err)
-	sharedSecret := result.(string)
-	result, err = GetIn(manifest, "properties", "syslog_daemon_config", "address")
-	FailOnError(err)
-	syslogHostIP, _ := result.(string)
-	result, err = GetIn(manifest, "properties", "syslog_daemon_config", "port")
-	FailOnError(err)
-	syslogPort := fmt.Sprintf("%v", result)
-
-	var bbsRequireSsl bool
-	result, _ = GetIn(manifest, "properties", "diego", "rep", "bbs", "require_ssl")
-	if result == nil {
-		bbsRequireSsl = false
-	} else {
-		bbsRequireSsl = result.(bool)
-	}
-
-	if bbsRequireSsl {
-		extractBbsKeyAndCert(manifest, *outputDir)
 	}
 
 	args := models.InstallerArguments{
-		ConsulRequireSSL: consulRequireSSL,
-		ConsulIPs:        joinedConsulIPs,
-		EtcdCluster:      etcdCluster,
-		SharedSecret:     sharedSecret,
-		Username:         *windowsUsername,
-		Password:         *windowsPassword,
-		SyslogHostIP:     syslogHostIP,
-		SyslogPort:       syslogPort,
-		BbsRequireSsl:    bbsRequireSsl,
+		Username: *windowsUsername,
+		Password: *windowsPassword,
 	}
+
+	fillEtcdCluster(&args, manifest)
+	fillSharedSecret(&args, manifest)
+	fillSyslog(&args, manifest)
+	fillConsul(&args, manifest, *outputDir)
+	fillBBS(&args, manifest, *outputDir)
 	generateInstallScript(*outputDir, args)
 }
 
-func extractBbsKeyAndCert(manifest interface{}, outputDir string) {
+func fillSharedSecret(args *models.InstallerArguments, manifest models.Manifest) {
+	repJob := firstRepJob(manifest)
+	properties := repJob.Properties
+	if properties.LoggregatorEndpoint == nil {
+		properties = manifest.Properties
+	}
+	args.SharedSecret = properties.LoggregatorEndpoint.SharedSecret
+}
+
+func fillSyslog(args *models.InstallerArguments, manifest models.Manifest) {
+	repJob := firstRepJob(manifest)
+	properties := repJob.Properties
+	// TODO: this is broken on ops manager:
+	//   1. there are no global properties section
+	//   2. none of the diego jobs (including rep) has syslog_daemon_config
+	if properties.Syslog == nil && manifest.Properties != nil {
+		properties = manifest.Properties
+	}
+
+	if properties.Syslog == nil {
+		return
+	}
+
+	args.SyslogHostIP = properties.Syslog.Address
+	args.SyslogPort = properties.Syslog.Port
+}
+
+func fillBBS(args *models.InstallerArguments, manifest models.Manifest, outputDir string) {
+	repJob := firstRepJob(manifest)
+	properties := repJob.Properties
+	if properties.Diego.Rep.BBS == nil {
+		properties = manifest.Properties
+	}
+
+	if properties.Diego.Rep.BBS.RequireSSL {
+		args.BbsRequireSsl = true
+		extractBbsKeyAndCert(properties, outputDir)
+	}
+}
+
+func fillConsul(args *models.InstallerArguments, manifest models.Manifest, outputDir string) {
+	repJob := firstRepJob(manifest)
+	properties := repJob.Properties
+	if properties.Consul == nil {
+		properties = manifest.Properties
+	}
+
+	if properties.Consul.RequireSSL {
+		args.ConsulRequireSSL = true
+		extractConsulKeyAndCert(properties, outputDir)
+	}
+
+	consuls := properties.Consul.Agent.Servers.Lan
+
+	args.ConsulIPs = strings.Join(consuls, ",")
+}
+
+func fillEtcdCluster(args *models.InstallerArguments, manifest models.Manifest) {
+	repJob := firstRepJob(manifest)
+	properties := repJob.Properties
+	if properties.Loggregator == nil {
+		properties = manifest.Properties
+	}
+
+	args.EtcdCluster = properties.Loggregator.Etcd.Machines[0]
+}
+
+func firstRepJob(manifest models.Manifest) models.Job {
+	jobs := manifest.Jobs
+
+	for _, job := range jobs {
+		if job.Properties.Diego != nil && job.Properties.Diego.Rep != nil {
+			return job
+		}
+
+	}
+	panic("no rep jobs found")
+}
+
+func extractConsulKeyAndCert(properties *models.Properties, outputDir string) {
 	for key, filename := range map[string]string{
-		"properties.diego.rep.bbs.client_cert": "bbs_client.crt",
-		"properties.diego.rep.bbs.client_key":  "bbs_client.key",
-		"properties.diego.rep.bbs.ca_cert":     "bbs_ca.crt",
+		properties.Consul.AgentCert:      "consul_agent.crt",
+		properties.Consul.AgentKey:       "consul_agent.key",
+		properties.Consul.CACert:         "consul_ca.crt",
+		properties.Consul.EncryptKeys[0]: "consul_encrypt.key",
 	} {
-		err := extractCert(manifest, outputDir, filename, key)
+		err := ioutil.WriteFile(path.Join(outputDir, filename), []byte(key), 0644)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v", err)
-			os.Exit(1)
+			FailOnError(err)
+		}
+	}
+}
+
+func extractBbsKeyAndCert(properties *models.Properties, outputDir string) {
+	for key, filename := range map[string]string{
+		properties.Diego.Rep.BBS.ClientCert: "bbs_client.crt",
+		properties.Diego.Rep.BBS.ClientKey:  "bbs_client.key",
+		properties.Diego.Rep.BBS.CACert:     "bbs_ca.crt",
+	} {
+		err := ioutil.WriteFile(path.Join(outputDir, filename), []byte(key), 0644)
+		if err != nil {
+			FailOnError(err)
 		}
 	}
 }
@@ -210,42 +235,6 @@ func FailOnError(err error) {
 	}
 }
 
-func getSubnetNetworkName(networks []interface{}, awsSubnet string) string {
-	for _, network := range networks {
-		networkName := network.(map[interface{}]interface{})["name"]
-
-		result, err := GetIn(network, "subnets")
-		FailOnError(err)
-		subnets := result.([]interface{})
-
-		for _, subnetProperties := range subnets {
-			result, err = GetIn(subnetProperties, "cloud_properties", "subnet")
-			FailOnError(err)
-			subnet := result.(string)
-			if subnet == awsSubnet {
-				return networkName.(string)
-			}
-		}
-	}
-	return ""
-}
-
-func getSubnetNetworkZone(repJobs []interface{}, subnetNetworkName string) string {
-	for _, job := range repJobs {
-		jobNetworks, err := GetIn(job, "networks")
-		FailOnError(err)
-		zone, err := GetIn(job, "properties", "diego", "rep", "zone")
-		FailOnError(err)
-		for _, jobNetwork := range jobNetworks.([]interface{}) {
-			networkName := jobNetwork.(map[interface{}]interface{})["name"]
-			if networkName == subnetNetworkName {
-				return zone.(string)
-			}
-		}
-	}
-	return ""
-}
-
 func generateInstallScript(outputDir string, args models.InstallerArguments) {
 	content := strings.Replace(installBatTemplate, "\n", "\r\n", -1)
 	temp := template.Must(template.New("").Parse(content))
@@ -261,21 +250,6 @@ func generateInstallScript(outputDir string, args models.InstallerArguments) {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func extractCert(manifest interface{}, outputDir, filename, pathString string) error {
-	manifestPath := []interface{}{}
-	for _, s := range strings.Split(pathString, ".") {
-		manifestPath = append(manifestPath, s)
-	}
-	result, err := GetIn(manifest, manifestPath...)
-	FailOnError(err)
-	if result == nil {
-		return errors.New("Failed to extract cert from deployment: " + pathString)
-	}
-	cert := result.(string)
-	ioutil.WriteFile(path.Join(outputDir, filename), []byte(cert), 0644)
-	return nil
 }
 
 func GetDiegoDeployment(deployments []models.IndexDeployment) int {
@@ -316,44 +290,4 @@ func NewBoshRequest(endpoint string) *http.Response {
 		log.Fatalln("Unable to establish connection to BOSH Director.", err)
 	}
 	return response
-}
-
-// Similar to https://clojuredocs.org/clojure.core/get-in
-//
-// if the path element is a string we assume obj is a map,
-// otherwise if it's an integer we assume obj is a slice
-//
-// Example:
-//    GetIn(obj, []string{"consul", "agent", ...})
-func GetIn(obj interface{}, path ...interface{}) (interface{}, error) {
-	if len(path) == 0 {
-		return obj, nil
-	}
-
-	switch x := obj.(type) {
-	case map[interface{}]interface{}:
-		obj = x[path[0]]
-		if obj == nil {
-			return nil, nil
-		}
-	case []interface{}:
-		var index int
-		var err error
-		index, ok := path[0].(int)
-		if !ok {
-			index, err = strconv.Atoi(path[0].(string))
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		obj = x[index]
-		if obj == nil {
-			return nil, nil
-		}
-	default:
-		return nil, nil
-	}
-
-	return GetIn(obj, path[1:]...)
 }

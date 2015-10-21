@@ -404,6 +404,79 @@ var _ = Describe("Generate", func() {
 			})
 		})
 
+		Context("when ran with an ouputDir param that points to a dir that doesn't exist", func() {
+			var session *gexec.Session
+			var nonExistingDir string
+			BeforeEach(func() {
+
+				outputDir, err := ioutil.TempDir("", "XXXXXXX")
+				nonExistingDir = path.Join(outputDir, "does_not_exist")
+				Expect(err).NotTo(HaveOccurred())
+				server := DefaultServer()
+				session = StartGeneratorWithArgs(
+					"-boshUrl", server.URL(),
+					"-outputDir", nonExistingDir,
+					"-windowsUsername", "admin",
+					"-windowsPassword", "password",
+				)
+			})
+
+			It("creates the directory", func() {
+				Eventually(session).Should(gexec.Exit(0))
+				_, err := os.Stat(nonExistingDir)
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Context("when the deployment has no consul certs", func() {
+			var session *gexec.Session
+			var script string
+
+			BeforeEach(func() {
+				server := CreateServer("no_consul_cert_manifest.yml", DefaultIndexDeployment())
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
+			})
+
+			It("does not contain consul parameters", func() {
+				expectedContent := ExpectedContent(models.InstallerArguments{
+					Username:         "admin",
+					Password:         "password",
+					ConsulRequireSSL: false,
+					BbsRequireSsl:    true,
+				})
+				Expect(script).To(Equal(expectedContent))
+			})
+		})
+
+		Context("when the deployment specifies consul properties in the job", func() {
+			var session *gexec.Session
+			var script string
+
+			BeforeEach(func() {
+				server := CreateServer("job_override_manifest.yml", DefaultIndexDeployment())
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
+			})
+
+			It("gets the properties from the job", func() {
+				expectedContent := ExpectedContent(models.InstallerArguments{
+					ConsulRequireSSL: true,
+					SyslogHostIP:     "logs2.test.com",
+					BbsRequireSsl:    true,
+					Username:         "admin",
+					Password:         "password",
+				})
+				Expect(script).To(Equal(expectedContent))
+			})
+		})
+
 	})
 
 	Describe("Failure scenarios", func() {
@@ -462,52 +535,5 @@ var _ = Describe("Generate", func() {
 			})
 		})
 
-		Context("when ran with an ouputDir param that points to a dir that doesn't exist", func() {
-			var session *gexec.Session
-			var nonExistingDir string
-			BeforeEach(func() {
-
-				outputDir, err := ioutil.TempDir("", "XXXXXXX")
-				nonExistingDir = path.Join(outputDir, "does_not_exist")
-				Expect(err).NotTo(HaveOccurred())
-				server := DefaultServer()
-				session = StartGeneratorWithArgs(
-					"-boshUrl", server.URL(),
-					"-outputDir", nonExistingDir,
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-				)
-			})
-
-			It("creates the directory", func() {
-				Eventually(session).Should(gexec.Exit(0))
-				_, err := os.Stat(nonExistingDir)
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
-		Context("when the deployment has no consul certs", func() {
-			var session *gexec.Session
-			var script string
-
-			BeforeEach(func() {
-				server := CreateServer("no_consul_cert_manifest.yml", DefaultIndexDeployment())
-				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
-			})
-
-			It("does not contain consul parameters", func() {
-				expectedContent := ExpectedContent(models.InstallerArguments{
-					Username:         "admin",
-					Password:         "password",
-					ConsulRequireSSL: false,
-					BbsRequireSsl:    true,
-				})
-				Expect(script).To(Equal(expectedContent))
-			})
-		})
 	})
 })
