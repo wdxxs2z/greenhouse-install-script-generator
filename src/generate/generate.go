@@ -12,14 +12,13 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"text/template"
 	"time"
 
-	"models"
+	"gopkg.in/yaml.v2"
 
-	"github.com/cloudfoundry-incubator/candiedyaml"
+	"models"
 )
 
 const (
@@ -98,55 +97,46 @@ func main() {
 	deployment := models.ShowDeployment{}
 	json.NewDecoder(response.Body).Decode(&deployment)
 	buf := bytes.NewBufferString(deployment.Manifest)
-	var manifest interface{}
-	candiedyaml.NewDecoder(buf).Decode(&manifest)
-
-	requireSSL, err := GetIn(manifest, "properties", "consul", "require_ssl")
+	var manifest models.Manifest
+	err = yaml.Unmarshal(buf.Bytes(), &manifest)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v", err)
-		os.Exit(1)
-	}
-
-	consulRequireSSL, ok := requireSSL.(bool)
-	if ok && consulRequireSSL {
-		for key, filename := range map[string]string{
-			"properties.consul.agent_cert":     "consul_agent.crt",
-			"properties.consul.agent_key":      "consul_agent.key",
-			"properties.consul.ca_cert":        "consul_ca.crt",
-			"properties.consul.encrypt_keys.0": "consul_encrypt.key",
-		} {
-			err = extractCert(manifest, *outputDir, filename, key)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%v", err)
-				os.Exit(1)
-			}
-		}
-	}
-
-	result, err := GetIn(manifest, "jobs")
-	FailOnError(err)
-	jobs := result.([]interface{})
-	var repJobs []interface{}
-
-	for _, job := range jobs {
-		jopHashRep, err := GetIn(job, "properties", "diego", "rep")
 		FailOnError(err)
-		if jopHashRep != nil {
-			repJobs = append(repJobs, job)
-		}
 	}
 
-	consuls, err := GetIn(manifest, "properties", "consul", "agent", "servers", "lan")
-	FailOnError(err)
-	consulIPs := []string{}
-	for _, c := range consuls.([]interface{}) {
-		consulIPs = append(consulIPs, c.(string))
+	etcdCluster := manifest.Properties.Etcd.Machines[0]
+
+	consulRequireSSL := false
+	if consulRequiresSSL(manifest) {
+		consulRequireSSL = true
+		extractConsulKeyAndCert(manifest, *outputDir)
 	}
-	joinedConsulIPs := strings.Join(consulIPs, ",")
-	result, err = GetIn(manifest, "properties", "etcd", "machines", 0)
-	FailOnError(err)
-	etcdCluster := result.(string)
-	result, err = GetIn(manifest, "properties", "loggregator_endpoint", "shared_secret")
+
+	consuls := manifest.Properties.Consul.Agent.Servers.Lan
+
+	if len(etcdCluster) == 0 {
+		// jobs := repJobs(manifest)
+		// if len(jobs) > 0 {
+		// 	firstJob := jobs[0]
+		// 	etcdCluster, err = GetIn(firstJob, "properties", "etcd", "machines", 0)
+		// 	FailOnError(err)
+		// }
+	}
+	if len(consuls) == 0 {
+		// jobs := repJobs(manifest)
+		// if len(jobs) > 0 {
+		// 	firstJob := jobs[0]
+		// 	consuls, err = GetIn(firstJob, "properties", "consul", "agent", "servers", "lan")
+		// 	FailOnError(err)
+		// 	if consulRequiresSSL(firstJob) {
+		// 		consulRequireSSL = true
+		// 		extractConsulKeyAndCert(firstJob, *outputDir)
+		// 	}
+		// }
+	}
+
+	joinedConsulIPs := strings.Join(consuls, ",")
+
+	result, err := GetIn(manifest, "properties", "loggregator_endpoint", "shared_secret")
 	FailOnError(err)
 	sharedSecret := result.(string)
 	result, err = GetIn(manifest, "properties", "syslog_daemon_config", "address")
@@ -180,6 +170,51 @@ func main() {
 		BbsRequireSsl:    bbsRequireSsl,
 	}
 	generateInstallScript(*outputDir, args)
+}
+
+func repJobs(manifest interface{}) []interface{} {
+	result, err := GetIn(manifest, "jobs")
+	FailOnError(err)
+	jobs := result.([]interface{})
+	var repJobs []interface{}
+
+	for _, job := range jobs {
+		jopHashRep, err := GetIn(job, "properties", "diego", "rep")
+		FailOnError(err)
+		if jopHashRep != nil {
+			repJobs = append(repJobs, job)
+		}
+	}
+	return repJobs
+}
+
+func consulRequiresSSL(manifest interface{}) bool {
+	requireSSL, err := GetIn(manifest, "properties", "consul", "require_ssl")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", err)
+		os.Exit(1)
+	}
+
+	consulRequireSSL := false
+	if val, ok := requireSSL.(bool); ok {
+		consulRequireSSL = val
+	}
+
+	return consulRequireSSL
+}
+
+func extractConsulKeyAndCert(manifest interface{}, outputDir string) {
+	for key, filename := range map[string]string{
+		"properties.consul.agent_cert":     "consul_agent.crt",
+		"properties.consul.agent_key":      "consul_agent.key",
+		"properties.consul.ca_cert":        "consul_ca.crt",
+		"properties.consul.encrypt_keys.0": "consul_encrypt.key",
+	} {
+		err := extractCert(manifest, outputDir, filename, key)
+		if err != nil {
+			FailOnError(err)
+		}
+	}
 }
 
 func extractBbsKeyAndCert(manifest interface{}, outputDir string) {
@@ -224,22 +259,6 @@ func getSubnetNetworkName(networks []interface{}, awsSubnet string) string {
 			subnet := result.(string)
 			if subnet == awsSubnet {
 				return networkName.(string)
-			}
-		}
-	}
-	return ""
-}
-
-func getSubnetNetworkZone(repJobs []interface{}, subnetNetworkName string) string {
-	for _, job := range repJobs {
-		jobNetworks, err := GetIn(job, "networks")
-		FailOnError(err)
-		zone, err := GetIn(job, "properties", "diego", "rep", "zone")
-		FailOnError(err)
-		for _, jobNetwork := range jobNetworks.([]interface{}) {
-			networkName := jobNetwork.(map[interface{}]interface{})["name"]
-			if networkName == subnetNetworkName {
-				return zone.(string)
 			}
 		}
 	}
@@ -316,44 +335,4 @@ func NewBoshRequest(endpoint string) *http.Response {
 		log.Fatalln("Unable to establish connection to BOSH Director.", err)
 	}
 	return response
-}
-
-// Similar to https://clojuredocs.org/clojure.core/get-in
-//
-// if the path element is a string we assume obj is a map,
-// otherwise if it's an integer we assume obj is a slice
-//
-// Example:
-//    GetIn(obj, []string{"consul", "agent", ...})
-func GetIn(obj interface{}, path ...interface{}) (interface{}, error) {
-	if len(path) == 0 {
-		return obj, nil
-	}
-
-	switch x := obj.(type) {
-	case map[interface{}]interface{}:
-		obj = x[path[0]]
-		if obj == nil {
-			return nil, nil
-		}
-	case []interface{}:
-		var index int
-		var err error
-		index, ok := path[0].(int)
-		if !ok {
-			index, err = strconv.Atoi(path[0].(string))
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		obj = x[index]
-		if obj == nil {
-			return nil, nil
-		}
-	default:
-		return nil, nil
-	}
-
-	return GetIn(obj, path[1:]...)
 }

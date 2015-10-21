@@ -1,0 +1,42 @@
+properties:
+
+jobs:
+  - properties:
+      diego:
+        rep:
+          zone:
+            zone1
+      loggregator:
+        etcd:
+          machines:
+            - etcd1.foo.bar
+      loggregator_endpoint:
+        shared_secret: secret123
+      diego:
+        rep:
+          bbs:
+            ca_cert: BBS_CA_CERT
+            client_cert: BBS_CLIENT_CERT
+            client_key: BBS_CLIENT_KEY
+            require_ssl: true
+
+      consul:
+        ca_cert: CONSUL_CA_CERT
+        require_ssl: true
+        agent_cert: CONSUL_AGENT_CERT
+        agent_key: CONSUL_AGENT_KEY
+        encrypt_keys:
+          - CONSUL_ENCRYPT
+        agent:
+          servers:
+            lan:
+              - consul1.foo.bar
+    networks:
+      - name: diego1
+
+networks:
+  - name: diego1
+    subnets:
+      - cloud_properties:
+          subnet: subnet-8a204ed3
+
