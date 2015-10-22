@@ -149,7 +149,9 @@ func fillBBS(args *models.InstallerArguments, manifest models.Manifest, outputDi
 		properties = manifest.Properties
 	}
 
-	if properties.Diego.Rep.BBS.RequireSSL {
+	requireSSL := properties.Diego.Rep.BBS.RequireSSL
+	// missing requireSSL implies true
+	if requireSSL == nil || *requireSSL {
 		args.BbsRequireSsl = true
 		extractBbsKeyAndCert(properties, outputDir)
 	}
@@ -162,7 +164,9 @@ func fillConsul(args *models.InstallerArguments, manifest models.Manifest, outpu
 		properties = manifest.Properties
 	}
 
-	if properties.Consul.RequireSSL {
+	// missing requireSSL implies true
+	requireSSL := properties.Consul.RequireSSL
+	if requireSSL == nil || *requireSSL {
 		args.ConsulRequireSSL = true
 		extractConsulKeyAndCert(properties, outputDir)
 	}
