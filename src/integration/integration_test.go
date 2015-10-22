@@ -180,7 +180,7 @@ func ExpectedContent(args models.InstallerArguments) string {
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE=windows ^
-  LOGGREGATOR_SHARED_SECRET=secret123 ^{{ if .SyslogHostIP }}
+  LOGGREGATOR_SHARED_SECRET=secret123 {{ if .SyslogHostIP }}^
   SYSLOG_HOST_IP=logs2.test.com ^
   SYSLOG_PORT=11111 {{ end }}{{ if .ConsulRequireSSL }}^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
@@ -396,6 +396,30 @@ var _ = Describe("Generate", func() {
 			It("does not contain bbs parameters", func() {
 				expectedContent := ExpectedContent(models.InstallerArguments{
 					ConsulRequireSSL: true,
+					BbsRequireSsl:    false,
+					Username:         "admin",
+					Password:         "password",
+				})
+				Expect(script).To(Equal(expectedContent))
+			})
+		})
+
+		Context("when the deployment has no bbs or consul certs", func() {
+			var session *gexec.Session
+			var script string
+
+			BeforeEach(func() {
+				server := CreateServer("no_consul_or_bbs_cert_manifest.yml", DefaultIndexDeployment())
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
+			})
+
+			It("does not contain bbs parameters", func() {
+				expectedContent := ExpectedContent(models.InstallerArguments{
+					ConsulRequireSSL: false,
 					BbsRequireSsl:    false,
 					Username:         "admin",
 					Password:         "password",

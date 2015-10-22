@@ -1,0 +1,24 @@
+properties:
+  consul:
+    require_ssl: false
+    agent:
+      servers:
+        lan:
+          - consul1.foo.bar
+  loggregator:
+    etcd:
+      machines:
+        - etcd1.foo.bar
+  loggregator_endpoint:
+    shared_secret: secret123
+  diego:
+    rep:
+      bbs:
+        require_ssl: false
+
+jobs:
+  - properties:
+      diego:
+        rep:
+          zone:
+            zone1
