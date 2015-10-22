@@ -308,8 +308,10 @@ var _ = Describe("Generate", func() {
 		Context("when the server returns a one zone manifest", func() {
 			var server *ghttp.Server
 
-			BeforeEach(func() {
-				server = CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
+			var manifestYaml = "one_zone_manifest.yml"
+
+			JustBeforeEach(func() {
+				server = CreateServer(manifestYaml, DefaultIndexDeployment())
 				var session *gexec.Session
 				session, outputDir = StartGeneratorWithURL(server.URL())
 				Eventually(session).Should(gexec.Exit(-1))
@@ -338,17 +340,31 @@ var _ = Describe("Generate", func() {
 					Expect(cert).To(BeEquivalentTo("CONSUL_AGENT_KEY"))
 				})
 
-				It("generates the encrypt key", func() {
-					cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_encrypt.key"))
-					Expect(err).NotTo(HaveOccurred())
-					Expect(cert).To(BeEquivalentTo("CONSUL_ENCRYPT"))
+				AssertEncryptKeyIsBase64Encoded := func() {
+					It("generates the encrypt key", func() {
+						cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_encrypt.key"))
+						Expect(err).NotTo(HaveOccurred())
+						Expect(cert).To(BeEquivalentTo("mBevws9TpU1sFPHK/Fq0IQ=="))
+					})
+				}
+
+				Context("when the manifest has base64 encoded key", func() {
+					AssertEncryptKeyIsBase64Encoded()
+				})
+
+				Context("when the manifest is using a passphrase", func() {
+					BeforeEach(func() {
+						manifestYaml = "encrypt_key_passphrase_manifest.yml"
+					})
+
+					AssertEncryptKeyIsBase64Encoded()
 				})
 			})
 
 			Describe("the lines of the batch script", func() {
 				var script string
 
-				BeforeEach(func() {
+				JustBeforeEach(func() {
 					content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
 					Expect(err).NotTo(HaveOccurred())
 					script = strings.TrimSpace(string(content))

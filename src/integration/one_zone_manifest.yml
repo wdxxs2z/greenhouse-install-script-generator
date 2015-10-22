@@ -5,7 +5,7 @@ properties:
     agent_cert: CONSUL_AGENT_CERT
     agent_key: CONSUL_AGENT_KEY
     encrypt_keys:
-      - CONSUL_ENCRYPT
+      - mBevws9TpU1sFPHK/Fq0IQ==
     agent:
       servers:
         lan:

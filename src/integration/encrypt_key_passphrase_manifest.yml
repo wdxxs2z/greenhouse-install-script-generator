@@ -5,7 +5,7 @@ properties:
     agent_cert: CONSUL_AGENT_CERT
     agent_key: CONSUL_AGENT_KEY
     encrypt_keys:
-      - mBevws9TpU1sFPHK/Fq0IQ==
+      - cf9fb26bcf854baab447
     agent:
       servers:
         lan:
@@ -23,10 +23,6 @@ properties:
         client_cert: BBS_CLIENT_CERT
         client_key: BBS_CLIENT_KEY
         require_ssl: true
-
-  syslog_daemon_config:
-    address: logs2.test.com
-    port: 11111
 
 jobs:
   - properties:

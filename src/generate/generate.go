@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -14,6 +16,8 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"golang.org/x/crypto/pbkdf2"
 
 	"gopkg.in/yaml.v2"
 
@@ -157,6 +161,16 @@ func fillBBS(args *models.InstallerArguments, manifest models.Manifest, outputDi
 	}
 }
 
+func stringToEncryptKey(str string) string {
+	decodedStr, err := base64.StdEncoding.DecodeString(str)
+	if err == nil && len(decodedStr) == 16 {
+		return str
+	}
+
+	key := pbkdf2.Key([]byte(str), nil, 20000, 16, sha1.New)
+	return base64.StdEncoding.EncodeToString(key)
+}
+
 func fillConsul(args *models.InstallerArguments, manifest models.Manifest, outputDir string) {
 	repJob := firstRepJob(manifest)
 	properties := repJob.Properties
@@ -199,11 +213,13 @@ func firstRepJob(manifest models.Manifest) models.Job {
 }
 
 func extractConsulKeyAndCert(properties *models.Properties, outputDir string) {
+	encryptKey := stringToEncryptKey(properties.Consul.EncryptKeys[0])
+
 	for key, filename := range map[string]string{
-		properties.Consul.AgentCert:      "consul_agent.crt",
-		properties.Consul.AgentKey:       "consul_agent.key",
-		properties.Consul.CACert:         "consul_ca.crt",
-		properties.Consul.EncryptKeys[0]: "consul_encrypt.key",
+		properties.Consul.AgentCert: "consul_agent.crt",
+		properties.Consul.AgentKey:  "consul_agent.key",
+		properties.Consul.CACert:    "consul_ca.crt",
+		encryptKey:                  "consul_encrypt.key",
 	} {
 		err := ioutil.WriteFile(path.Join(outputDir, filename), []byte(key), 0644)
 		if err != nil {
