@@ -13,12 +13,12 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"text/template"
 	"time"
 
 	"golang.org/x/crypto/pbkdf2"
-
 	"gopkg.in/yaml.v2"
 
 	"models"
@@ -68,8 +68,7 @@ func main() {
 		}
 	}
 
-	*windowsUsername = EscapeSpecialCharacters(*windowsUsername)
-	*windowsPassword = EscapeSpecialCharacters(*windowsPassword)
+	validateCredentials(*windowsUsername, *windowsPassword)
 
 	response := NewBoshRequest(*boshServerUrl + "/deployments")
 	defer response.Body.Close()
@@ -241,14 +240,6 @@ func extractBbsKeyAndCert(properties *models.Properties, outputDir string) {
 	}
 }
 
-func EscapeSpecialCharacters(str string) string {
-	specialCharacters := []string{"^", "%", "(", ")", `"`, "<", ">", "&", "!", "|"}
-	for _, c := range specialCharacters {
-		str = strings.Replace(str, c, "^"+c, -1)
-	}
-	return str
-}
-
 func FailOnError(err error) {
 	if err != nil {
 		panic(err)
@@ -310,4 +301,15 @@ func NewBoshRequest(endpoint string) *http.Response {
 		log.Fatalln("Unable to establish connection to BOSH Director.", err)
 	}
 	return response
+}
+
+func validateCredentials(username, password string) {
+	pattern := regexp.MustCompile("^[a-zA-Z0-9]+$")
+	if !pattern.Match([]byte(password)) {
+		log.Fatalln("Invalid windowsPassword, must be alphanumeric")
+	}
+
+	if !pattern.Match([]byte(username)) {
+		log.Fatalln("Invalid windowsUsername, must be alphanumeric")
+	}
 }

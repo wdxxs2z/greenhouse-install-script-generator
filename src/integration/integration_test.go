@@ -382,40 +382,6 @@ var _ = Describe("Generate", func() {
 			})
 		})
 
-		Describe("user provides arguments with special characters", func() {
-			var server *ghttp.Server
-			var script string
-
-			BeforeEach(func() {
-				var err error
-				outputDir, err = ioutil.TempDir("", "XXXXXXX")
-				Expect(err).NotTo(HaveOccurred())
-				server = CreateServer("one_zone_manifest.yml", DefaultIndexDeployment())
-				var session *gexec.Session
-				session = StartGeneratorWithArgs(
-					"-boshUrl", server.URL(),
-					"-outputDir", outputDir,
-					"-windowsUsername", "%admin",
-					"-windowsPassword", "pass^word",
-				)
-				Eventually(session).Should(gexec.Exit(-1))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
-			})
-
-			It("escapes them", func() {
-				Expect(server.ReceivedRequests()).To(HaveLen(2))
-				expectedContent := ExpectedContent(models.InstallerArguments{
-					ConsulRequireSSL: true,
-					BbsRequireSsl:    true,
-					Username:         "^%admin",
-					Password:         "pass^^word",
-				})
-				Expect(script).To(Equal(expectedContent))
-			})
-		})
-
 		Context("when the deployment has no bbs certs", func() {
 			var session *gexec.Session
 			var script string
@@ -550,48 +516,77 @@ var _ = Describe("Generate", func() {
 				Eventually(session).Should(gexec.Exit(1))
 				Expect(session.Err).Should(gbytes.Say("Usage of generate:"))
 			})
+		})
 
-			Context("when the server is not reachable", func() {
-				var session *gexec.Session
+		Context("non alphanumeric credentials", func() {
+			It("it shows an error for username", func() {
+				outputDir, err := ioutil.TempDir("", "XXXXXXX")
+				Expect(err).ToNot(HaveOccurred())
+				session := StartGeneratorWithArgs(
+					"-boshUrl", "http://example.org",
+					"-outputDir", outputDir,
+					"-windowsUsername", "%%29529@@",
+					"-windowsPassword", "password",
+				)
 
-				BeforeEach(func() {
-					session, outputDir = StartGeneratorWithURL("http://1.2.3.4:5555")
-					Eventually(session, "15s", "1s").Should(gexec.Exit(1))
-				})
+				Eventually(session).Should(gexec.Exit(1))
+				Expect(session.Err).Should(gbytes.Say("Invalid windowsUsername"))
+			})
+			It("it shows an error for password", func() {
+				outputDir, err := ioutil.TempDir("", "XXXXXXX")
+				Expect(err).ToNot(HaveOccurred())
+				session := StartGeneratorWithArgs(
+					"-boshUrl", "http://example.org",
+					"-outputDir", outputDir,
+					"-windowsUsername", "admin",
+					"-windowsPassword", "%@(%*@)(%@)@%(",
+				)
 
-				It("displays the reponse error to the user", func() {
-					Expect(session.Err).Should(gbytes.Say("Unable to establish connection to BOSH Director"))
-				})
+				Eventually(session).Should(gexec.Exit(1))
+				Expect(session.Err).Should(gbytes.Say("Invalid windowsPassword"))
+			})
+		})
+
+		Context("when the server is not reachable", func() {
+			var session *gexec.Session
+
+			BeforeEach(func() {
+				session, outputDir = StartGeneratorWithURL("http://1.2.3.4:5555")
+				Eventually(session, "15s", "1s").Should(gexec.Exit(1))
 			})
 
-			Context("when the server returns an unauthorized error", func() {
-				var server *ghttp.Server
-				var session *gexec.Session
+			It("displays the reponse error to the user", func() {
+				Expect(session.Err).Should(gbytes.Say("Unable to establish connection to BOSH Director"))
+			})
+		})
 
-				BeforeEach(func() {
-					server = Create401Server()
-					session, outputDir = StartGeneratorWithURL(server.URL())
-					Eventually(session).Should(gexec.Exit(1))
-				})
+		Context("when the server returns an unauthorized error", func() {
+			var server *ghttp.Server
+			var session *gexec.Session
 
-				It("displays the reponse error to the user", func() {
-					Expect(session.Err).Should(gbytes.Say("Not authorized"))
-				})
+			BeforeEach(func() {
+				server = Create401Server()
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(1))
 			})
 
-			Context("when the server returns an ambiguous number of deployments", func() {
-				var server *ghttp.Server
-				var session *gexec.Session
+			It("displays the reponse error to the user", func() {
+				Expect(session.Err).Should(gbytes.Say("Not authorized"))
+			})
+		})
 
-				BeforeEach(func() {
-					server = CreateServer("one_zone_manifest.yml", AmbiguousIndexDeployment())
-					session, outputDir = StartGeneratorWithURL(server.URL())
-					Eventually(session).Should(gexec.Exit(1))
-				})
+		Context("when the server returns an ambiguous number of deployments", func() {
+			var server *ghttp.Server
+			var session *gexec.Session
 
-				It("displays the reponse error to the user", func() {
-					Expect(session.Err).Should(gbytes.Say("BOSH Director does not have exactly one deployment containing a cf and diego release."))
-				})
+			BeforeEach(func() {
+				server = CreateServer("one_zone_manifest.yml", AmbiguousIndexDeployment())
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(1))
+			})
+
+			It("displays the reponse error to the user", func() {
+				Expect(session.Err).Should(gbytes.Say("BOSH Director does not have exactly one deployment containing a cf and diego release."))
 			})
 		})
 
