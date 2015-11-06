@@ -205,32 +205,46 @@ msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
 
 var _ = Describe("Generate", func() {
 	var outputDir string
+	var script string
+	var server *ghttp.Server
+	var manifestYaml string
+	var deployments []models.IndexDeployment
+	var session *gexec.Session
+
+	BeforeEach(func() {
+		manifestYaml = "syslog_manifest.yml"
+		deployments = DefaultIndexDeployment()
+	})
 
 	AfterEach(func() {
+		server.Close()
 		Expect(os.RemoveAll(outputDir)).To(Succeed())
 	})
 
-	Describe("Success scenarios", func() {
-		Context("when the deployment has syslog", func() {
-			var manifestYaml string
-			var session *gexec.Session
-			var script string
+	JustBeforeEach(func() {
+		server = CreateServer(manifestYaml, deployments)
+	})
 
+	Describe("Success scenarios", func() {
+		JustBeforeEach(func() {
+			if server == nil {
+				server = CreateServer(manifestYaml, deployments)
+			}
+
+			session, outputDir = StartGeneratorWithURL(server.URL())
+			Eventually(session).Should(gexec.Exit(0))
+			content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
+			Expect(err).NotTo(HaveOccurred())
+			script = strings.TrimSpace(string(content))
+		})
+
+		Context("when the deployment has syslog", func() {
 			expectedContent := ExpectedContent(models.InstallerArguments{
 				ConsulRequireSSL: true,
 				SyslogHostIP:     "logs2.test.com",
 				BbsRequireSsl:    true,
 				Username:         "admin",
 				Password:         "password",
-			})
-
-			JustBeforeEach(func() {
-				server := CreateServer(manifestYaml, DefaultIndexDeployment())
-				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
 			})
 
 			AssertExpectedContent := func() {
@@ -257,16 +271,8 @@ var _ = Describe("Generate", func() {
 		})
 
 		Context("when the deployment has a string port in the syslog", func() {
-			var session *gexec.Session
-			var script string
-
 			BeforeEach(func() {
-				server := CreateServer("syslog_with_string_port_manifest.yml", DefaultIndexDeployment())
-				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
+				manifestYaml = "syslog_with_string_port_manifest.yml"
 			})
 
 			It("contains all the MSI parameters", func() {
@@ -282,16 +288,8 @@ var _ = Describe("Generate", func() {
 		})
 
 		Context("when the deployment has a null address and port in the syslog", func() {
-			var session *gexec.Session
-			var script string
-
 			BeforeEach(func() {
-				server := CreateServer("syslog_with_null_address_and_port.yml", DefaultIndexDeployment())
-				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
+				manifestYaml = "syslog_with_null_address_and_port.yml"
 			})
 
 			It("contains all the MSI parameters", func() {
@@ -306,11 +304,8 @@ var _ = Describe("Generate", func() {
 		})
 
 		Context("when the server returns a one zone manifest", func() {
-			var server *ghttp.Server
-
-			var manifestYaml = "one_zone_manifest.yml"
-
 			JustBeforeEach(func() {
+				manifestYaml = "one_zone_manifest.yml"
 				server = CreateServer(manifestYaml, DefaultIndexDeployment())
 				var session *gexec.Session
 				session, outputDir = StartGeneratorWithURL(server.URL())
@@ -383,16 +378,8 @@ var _ = Describe("Generate", func() {
 		})
 
 		Context("when the deployment has no bbs certs", func() {
-			var session *gexec.Session
-			var script string
-
 			BeforeEach(func() {
-				server := CreateServer("no_bbs_cert_manifest.yml", DefaultIndexDeployment())
-				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
+				manifestYaml = "no_bbs_cert_manifest.yml"
 			})
 
 			It("does not contain bbs parameters", func() {
@@ -407,16 +394,8 @@ var _ = Describe("Generate", func() {
 		})
 
 		Context("when the deployment has no bbs or consul certs", func() {
-			var session *gexec.Session
-			var script string
-
 			BeforeEach(func() {
-				server := CreateServer("no_consul_or_bbs_cert_manifest.yml", DefaultIndexDeployment())
-				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
+				manifestYaml = "no_consul_or_bbs_cert_manifest.yml"
 			})
 
 			It("does not contain bbs parameters", func() {
@@ -430,41 +409,9 @@ var _ = Describe("Generate", func() {
 			})
 		})
 
-		Context("when ran with an ouputDir param that points to a dir that doesn't exist", func() {
-			var session *gexec.Session
-			var nonExistingDir string
-			BeforeEach(func() {
-
-				outputDir, err := ioutil.TempDir("", "XXXXXXX")
-				nonExistingDir = path.Join(outputDir, "does_not_exist")
-				Expect(err).NotTo(HaveOccurred())
-				server := DefaultServer()
-				session = StartGeneratorWithArgs(
-					"-boshUrl", server.URL(),
-					"-outputDir", nonExistingDir,
-					"-windowsUsername", "admin",
-					"-windowsPassword", "password",
-				)
-			})
-
-			It("creates the directory", func() {
-				Eventually(session).Should(gexec.Exit(0))
-				_, err := os.Stat(nonExistingDir)
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
 		Context("when the deployment has no consul certs", func() {
-			var session *gexec.Session
-			var script string
-
 			BeforeEach(func() {
-				server := CreateServer("no_consul_cert_manifest.yml", DefaultIndexDeployment())
-				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
+				manifestYaml = "no_consul_cert_manifest.yml"
 			})
 
 			It("does not contain consul parameters", func() {
@@ -479,16 +426,8 @@ var _ = Describe("Generate", func() {
 		})
 
 		Context("when the deployment specifies consul properties in the job", func() {
-			var session *gexec.Session
-			var script string
-
 			BeforeEach(func() {
-				server := CreateServer("job_override_manifest.yml", DefaultIndexDeployment())
-				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(0))
-				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-				Expect(err).NotTo(HaveOccurred())
-				script = strings.TrimSpace(string(content))
+				manifestYaml = "job_override_manifest.yml"
 			})
 
 			It("gets the properties from the job", func() {
@@ -502,48 +441,51 @@ var _ = Describe("Generate", func() {
 				Expect(script).To(Equal(expectedContent))
 			})
 		})
-
 	})
 
 	Describe("Failure scenarios", func() {
-		Context("when ran without params", func() {
-			var session *gexec.Session
-			BeforeEach(func() {
-				session = StartGeneratorWithArgs()
-			})
-
-			It("prints an error message", func() {
-				Eventually(session).Should(gexec.Exit(1))
-				Expect(session.Err).Should(gbytes.Say("Usage of generate:"))
-			})
-		})
-
 		Context("non alphanumeric credentials", func() {
-			It("it shows an error for username", func() {
-				outputDir, err := ioutil.TempDir("", "XXXXXXX")
-				Expect(err).ToNot(HaveOccurred())
-				session := StartGeneratorWithArgs(
-					"-boshUrl", "http://example.org",
-					"-outputDir", outputDir,
-					"-windowsUsername", "%%29529@@",
-					"-windowsPassword", "password",
-				)
+			var username, password string
 
-				Eventually(session).Should(gexec.Exit(1))
-				Expect(session.Err).Should(gbytes.Say("Invalid windowsUsername"))
+			BeforeEach(func() {
+				username = "username"
+				password = "password"
 			})
-			It("it shows an error for password", func() {
+
+			JustBeforeEach(func() {
 				outputDir, err := ioutil.TempDir("", "XXXXXXX")
 				Expect(err).ToNot(HaveOccurred())
-				session := StartGeneratorWithArgs(
+				session = StartGeneratorWithArgs(
 					"-boshUrl", "http://example.org",
 					"-outputDir", outputDir,
-					"-windowsUsername", "admin",
-					"-windowsPassword", "%@(%*@)(%@)@%(",
+					"-windowsUsername", username,
+					"-windowsPassword", password,
 				)
+			})
 
-				Eventually(session).Should(gexec.Exit(1))
-				Expect(session.Err).Should(gbytes.Say("Invalid windowsPassword"))
+			Context("non alphanumeric username", func() {
+				BeforeEach(func() {
+					username = "%%29529@@"
+				})
+
+				It("exits with exit code 1", func() {
+					Eventually(session).Should(gexec.Exit(1))
+				})
+
+				It("prints an error mess", func() {
+					Eventually(session.Err).Should(gbytes.Say("Invalid windowsUsername"))
+				})
+			})
+
+			Context("non alphanumeric password", func() {
+				BeforeEach(func() {
+					password = "%@(%*@)(%@)@%("
+				})
+
+				It("does not return an error", func() {
+					Eventually(session).Should(gexec.Exit(1))
+					Eventually(session.Err).Should(gbytes.Say("Invalid windowsPassword"))
+				})
 			})
 		})
 
@@ -590,5 +532,39 @@ var _ = Describe("Generate", func() {
 			})
 		})
 
+		Context("when ran without params", func() {
+			var session *gexec.Session
+			BeforeEach(func() {
+				session = StartGeneratorWithArgs()
+			})
+
+			It("prints an error message", func() {
+				Eventually(session).Should(gexec.Exit(1))
+				Expect(session.Err).Should(gbytes.Say("Usage of generate:"))
+			})
+		})
+	})
+
+	Context("when ran with an ouputDir param that points to a dir that doesn't exist", func() {
+		var session *gexec.Session
+		var nonExistingDir string
+		BeforeEach(func() {
+			outputDir, err := ioutil.TempDir("", "XXXXXXX")
+			nonExistingDir = path.Join(outputDir, "does_not_exist")
+			Expect(err).NotTo(HaveOccurred())
+			server := DefaultServer()
+			session = StartGeneratorWithArgs(
+				"-boshUrl", server.URL(),
+				"-outputDir", nonExistingDir,
+				"-windowsUsername", "admin",
+				"-windowsPassword", "password",
+			)
+		})
+
+		It("creates the directory", func() {
+			Eventually(session).Should(gexec.Exit(0))
+			_, err := os.Stat(nonExistingDir)
+			Expect(err).NotTo(HaveOccurred())
+		})
 	})
 })
