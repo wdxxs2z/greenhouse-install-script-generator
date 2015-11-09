@@ -218,7 +218,7 @@ var _ = Describe("Generate", func() {
 
 	AfterEach(func() {
 		server.Close()
-		Expect(os.RemoveAll(outputDir)).To(Succeed())
+		// Expect(os.RemoveAll(outputDir)).To(Succeed())
 	})
 
 	JustBeforeEach(func() {
@@ -453,10 +453,11 @@ var _ = Describe("Generate", func() {
 			})
 
 			JustBeforeEach(func() {
-				outputDir, err := ioutil.TempDir("", "XXXXXXX")
+				var err error
+				outputDir, err = ioutil.TempDir("", "XXXXXXX")
 				Expect(err).ToNot(HaveOccurred())
 				session = StartGeneratorWithArgs(
-					"-boshUrl", "http://example.org",
+					"-boshUrl", server.URL(),
 					"-outputDir", outputDir,
 					"-windowsUsername", username,
 					"-windowsPassword", password,
@@ -477,14 +478,27 @@ var _ = Describe("Generate", func() {
 				})
 			})
 
-			Context("non alphanumeric password", func() {
+			FContext("non alphanumeric password", func() {
 				BeforeEach(func() {
-					password = "%@(%*@)(%@)@%("
+					password = "password`~!@#$^&*()_-+={}[]\\|:;<>,.?/123'%\""
 				})
 
-				It("does not return an error", func() {
-					Eventually(session).Should(gexec.Exit(1))
-					Eventually(session.Err).Should(gbytes.Say("Invalid windowsPassword"))
+				JustBeforeEach(func() {
+					Eventually(session).Should(gexec.Exit(0))
+					content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
+					Expect(err).NotTo(HaveOccurred())
+					script = strings.TrimSpace(string(content))
+				})
+
+				It("escapes the password properly", func() {
+					expectedContent := ExpectedContent(models.InstallerArguments{
+						ConsulRequireSSL: true,
+						SyslogHostIP:     "logs2.test.com",
+						BbsRequireSsl:    true,
+						Username:         "username",
+						Password:         "\"\"\"password`~!@#$^&*()_-+={}[]\\|:;<>,.?/123'%%\\\"\"\"\"",
+					})
+					Expect(script).To(Equal(expectedContent))
 				})
 			})
 		})
