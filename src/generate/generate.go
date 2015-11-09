@@ -69,6 +69,7 @@ func main() {
 	}
 
 	validateCredentials(*windowsUsername, *windowsPassword)
+	escapeWindowsPassword(windowsPassword)
 
 	response := NewBoshRequest(*boshServerUrl + "/deployments")
 	defer response.Body.Close()
@@ -303,13 +304,21 @@ func NewBoshRequest(endpoint string) *http.Response {
 	return response
 }
 
+func escapeWindowsPassword(password *string) {
+	newPassword := *password
+	newPassword = strings.Replace(newPassword, "%", "%%", -1)
+	newPassword = "\"\"\"" + newPassword + "\"\"\""
+	*password = newPassword
+}
+
 func validateCredentials(username, password string) {
 	pattern := regexp.MustCompile("^[a-zA-Z0-9]+$")
-	if !pattern.Match([]byte(password)) {
-		log.Fatalln("Invalid windowsPassword, must be alphanumeric")
-	}
 
 	if !pattern.Match([]byte(username)) {
 		log.Fatalln("Invalid windowsUsername, must be alphanumeric")
+	}
+
+	if strings.Contains(password, `"`) {
+		log.Fatalln("Invalid windowsPassword, must not contain double-quotes")
 	}
 }
