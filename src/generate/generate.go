@@ -33,7 +33,8 @@ const (
   CF_ETCD_CLUSTER=http://{{.EtcdCluster}}:4001 ^
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE={{.Zone}} ^
-  LOGGREGATOR_SHARED_SECRET={{.SharedSecret}} {{ if .SyslogHostIP }}^
+  LOGGREGATOR_SHARED_SECRET=secret123 {{ if .ExternalIp }}^
+  EXTERNAL_IP={{.ExternalIp}} {{end}}{{ if .SyslogHostIP }}^
   SYSLOG_HOST_IP={{.SyslogHostIP}} ^
   SYSLOG_PORT={{.SyslogPort}} {{ end }}{{if .ConsulRequireSSL }}^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
@@ -43,7 +44,8 @@ const (
 
 msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
   ADMIN_USERNAME={{.Username}} ^
-  ADMIN_PASSWORD={{.Password}}{{ if .SyslogHostIP }}^
+  ADMIN_PASSWORD={{.Password}}{{ if .ExternalIp }}^
+  EXTERNAL_IP=127.0.0.1 {{end}}{{ if .SyslogHostIP }}^
   SYSLOG_HOST_IP={{.SyslogHostIP}} ^
   SYSLOG_PORT={{.SyslogPort}}{{ end }}`
 )
@@ -53,6 +55,7 @@ func main() {
 	outputDir := flag.String("outputDir", "", "Output directory (/tmp/scripts)")
 	windowsUsername := flag.String("windowsUsername", "", "Windows username")
 	windowsPassword := flag.String("windowsPassword", "", "Windows password")
+	externalIp := flag.String("externalIp", "", "(optional) IP address of this cell")
 
 	flag.Parse()
 	if *boshServerUrl == "" || *outputDir == "" {
@@ -107,8 +110,9 @@ func main() {
 	}
 
 	args := models.InstallerArguments{
-		Username: *windowsUsername,
-		Password: *windowsPassword,
+		Username:   *windowsUsername,
+		Password:   *windowsPassword,
+		ExternalIp: *externalIp,
 	}
 
 	fillEtcdCluster(&args, manifest)

@@ -25,6 +25,7 @@ type InstallerArguments struct {
 	SyslogHostIP     string
 	SyslogPort       string
 	BbsRequireSsl    bool
+	ExternalIp       string
 }
 
 type ConsulProperties struct {

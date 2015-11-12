@@ -180,7 +180,8 @@ func ExpectedContent(args models.InstallerArguments) string {
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE=windows ^
-  LOGGREGATOR_SHARED_SECRET=secret123 {{ if .SyslogHostIP }}^
+  LOGGREGATOR_SHARED_SECRET=secret123 {{ if .ExternalIp }}^
+  EXTERNAL_IP=127.0.0.1 {{end}}{{ if .SyslogHostIP }}^
   SYSLOG_HOST_IP=logs2.test.com ^
   SYSLOG_PORT=11111 {{ end }}{{ if .ConsulRequireSSL }}^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
@@ -190,7 +191,8 @@ func ExpectedContent(args models.InstallerArguments) string {
 
 msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
   ADMIN_USERNAME={{.Username}} ^
-  ADMIN_PASSWORD={{.Password}}{{ if .SyslogHostIP }}^
+  ADMIN_PASSWORD={{.Password}}{{ if .ExternalIp }}^
+  EXTERNAL_IP=127.0.0.1 {{end}}{{ if .SyslogHostIP }}^
   SYSLOG_HOST_IP=logs2.test.com ^
   SYSLOG_PORT=11111{{ end }}`
 	content = strings.Replace(content, "\n", "\r\n", -1)
@@ -218,7 +220,7 @@ var _ = Describe("Generate", func() {
 
 	AfterEach(func() {
 		server.Close()
-		// Expect(os.RemoveAll(outputDir)).To(Succeed())
+		Expect(os.RemoveAll(outputDir)).To(Succeed())
 	})
 
 	JustBeforeEach(func() {
@@ -226,56 +228,16 @@ var _ = Describe("Generate", func() {
 	})
 
 	Describe("Success scenarios", func() {
-		JustBeforeEach(func() {
-			if server == nil {
-				server = CreateServer(manifestYaml, deployments)
-			}
-
-			session, outputDir = StartGeneratorWithURL(server.URL())
-			Eventually(session).Should(gexec.Exit(0))
-			content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-			Expect(err).NotTo(HaveOccurred())
-			script = strings.TrimSpace(string(content))
-		})
-
-		Context("when the deployment has syslog", func() {
-			expectedContent := ExpectedContent(models.InstallerArguments{
-				ConsulRequireSSL: true,
-				SyslogHostIP:     "logs2.test.com",
-				BbsRequireSsl:    true,
-				Username:         "admin",
-				Password:         `"""password"""`,
+		Context("with default arguments", func() {
+			JustBeforeEach(func() {
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
 			})
 
-			AssertExpectedContent := func() {
-				It("contains all the MSI parameters", func() {
-					Expect(script).To(Equal(expectedContent))
-				})
-			}
-
-			Context("when values are explicitly set", func() {
-				BeforeEach(func() {
-					manifestYaml = "syslog_manifest.yml"
-				})
-
-				AssertExpectedContent()
-			})
-
-			Context("when values are implicitly set by defaults", func() {
-				BeforeEach(func() {
-					manifestYaml = "syslog_manifest_default_values.yml"
-				})
-
-				AssertExpectedContent()
-			})
-		})
-
-		Context("when the deployment has a string port in the syslog", func() {
-			BeforeEach(func() {
-				manifestYaml = "syslog_with_string_port_manifest.yml"
-			})
-
-			It("contains all the MSI parameters", func() {
+			Context("when the deployment has syslog", func() {
 				expectedContent := ExpectedContent(models.InstallerArguments{
 					ConsulRequireSSL: true,
 					SyslogHostIP:     "logs2.test.com",
@@ -283,86 +245,48 @@ var _ = Describe("Generate", func() {
 					Username:         "admin",
 					Password:         `"""password"""`,
 				})
-				Expect(script).To(Equal(expectedContent))
-			})
-		})
 
-		Context("when the deployment has a null address and port in the syslog", func() {
-			BeforeEach(func() {
-				manifestYaml = "syslog_with_null_address_and_port.yml"
-			})
-
-			It("contains all the MSI parameters", func() {
-				expectedContent := ExpectedContent(models.InstallerArguments{
-					ConsulRequireSSL: true,
-					BbsRequireSsl:    true,
-					Username:         "admin",
-					Password:         `"""password"""`,
-				})
-				Expect(script).To(Equal(expectedContent))
-			})
-		})
-
-		Context("when the server returns a one zone manifest", func() {
-			JustBeforeEach(func() {
-				manifestYaml = "one_zone_manifest.yml"
-				server = CreateServer(manifestYaml, DefaultIndexDeployment())
-				var session *gexec.Session
-				session, outputDir = StartGeneratorWithURL(server.URL())
-				Eventually(session).Should(gexec.Exit(-1))
-			})
-
-			It("sends get requests to get the deployments", func() {
-				Expect(server.ReceivedRequests()).To(HaveLen(2))
-			})
-
-			Context("consul files", func() {
-				It("generates the certificate authority cert", func() {
-					cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_ca.crt"))
-					Expect(err).NotTo(HaveOccurred())
-					Expect(cert).To(BeEquivalentTo("CONSUL_CA_CERT"))
-				})
-
-				It("generates the agent cert", func() {
-					cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_agent.crt"))
-					Expect(err).NotTo(HaveOccurred())
-					Expect(cert).To(BeEquivalentTo("CONSUL_AGENT_CERT"))
-				})
-
-				It("generates the agent key", func() {
-					cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_agent.key"))
-					Expect(err).NotTo(HaveOccurred())
-					Expect(cert).To(BeEquivalentTo("CONSUL_AGENT_KEY"))
-				})
-
-				AssertEncryptKeyIsBase64Encoded := func() {
-					It("generates the encrypt key", func() {
-						cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_encrypt.key"))
-						Expect(err).NotTo(HaveOccurred())
-						Expect(cert).To(BeEquivalentTo("mBevws9TpU1sFPHK/Fq0IQ=="))
-					})
-				}
-
-				Context("when the manifest has base64 encoded key", func() {
-					AssertEncryptKeyIsBase64Encoded()
-				})
-
-				Context("when the manifest is using a passphrase", func() {
+				Context("when values are explicitly set", func() {
 					BeforeEach(func() {
-						manifestYaml = "encrypt_key_passphrase_manifest.yml"
+						manifestYaml = "syslog_manifest.yml"
 					})
 
-					AssertEncryptKeyIsBase64Encoded()
+					It("contains all the MSI parameters", func() {
+						Expect(script).To(Equal(expectedContent))
+					})
+				})
+
+				Context("when values are implicitly set by defaults", func() {
+					BeforeEach(func() {
+						manifestYaml = "syslog_manifest_default_values.yml"
+					})
+
+					It("contains all the MSI parameters", func() {
+						Expect(script).To(Equal(expectedContent))
+					})
 				})
 			})
 
-			Describe("the lines of the batch script", func() {
-				var script string
+			Context("when the deployment has a string port in the syslog", func() {
+				BeforeEach(func() {
+					manifestYaml = "syslog_with_string_port_manifest.yml"
+				})
 
-				JustBeforeEach(func() {
-					content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
-					Expect(err).NotTo(HaveOccurred())
-					script = strings.TrimSpace(string(content))
+				It("contains all the MSI parameters", func() {
+					expectedContent := ExpectedContent(models.InstallerArguments{
+						ConsulRequireSSL: true,
+						SyslogHostIP:     "logs2.test.com",
+						BbsRequireSsl:    true,
+						Username:         "admin",
+						Password:         `"""password"""`,
+					})
+					Expect(script).To(Equal(expectedContent))
+				})
+			})
+
+			Context("when the deployment has a null address and port in the syslog", func() {
+				BeforeEach(func() {
+					manifestYaml = "syslog_with_null_address_and_port.yml"
 				})
 
 				It("contains all the MSI parameters", func() {
@@ -375,59 +299,163 @@ var _ = Describe("Generate", func() {
 					Expect(script).To(Equal(expectedContent))
 				})
 			})
-		})
 
-		Context("when the deployment has no bbs certs", func() {
-			BeforeEach(func() {
-				manifestYaml = "no_bbs_cert_manifest.yml"
-			})
-
-			It("does not contain bbs parameters", func() {
-				expectedContent := ExpectedContent(models.InstallerArguments{
-					ConsulRequireSSL: true,
-					BbsRequireSsl:    false,
-					Username:         "admin",
-					Password:         `"""password"""`,
+			Context("when the server returns a one zone manifest", func() {
+				JustBeforeEach(func() {
+					manifestYaml = "one_zone_manifest.yml"
+					server = CreateServer(manifestYaml, DefaultIndexDeployment())
+					var session *gexec.Session
+					session, outputDir = StartGeneratorWithURL(server.URL())
+					Eventually(session).Should(gexec.Exit(-1))
 				})
-				Expect(script).To(Equal(expectedContent))
-			})
-		})
 
-		Context("when the deployment has no bbs or consul certs", func() {
-			BeforeEach(func() {
-				manifestYaml = "no_consul_or_bbs_cert_manifest.yml"
-			})
-
-			It("does not contain bbs parameters", func() {
-				expectedContent := ExpectedContent(models.InstallerArguments{
-					ConsulRequireSSL: false,
-					BbsRequireSsl:    false,
-					Username:         "admin",
-					Password:         `"""password"""`,
+				It("sends get requests to get the deployments", func() {
+					Expect(server.ReceivedRequests()).To(HaveLen(2))
 				})
-				Expect(script).To(Equal(expectedContent))
-			})
-		})
 
-		Context("when the deployment has no consul certs", func() {
-			BeforeEach(func() {
-				manifestYaml = "no_consul_cert_manifest.yml"
-			})
+				Context("consul files", func() {
+					It("generates the certificate authority cert", func() {
+						cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_ca.crt"))
+						Expect(err).NotTo(HaveOccurred())
+						Expect(cert).To(BeEquivalentTo("CONSUL_CA_CERT"))
+					})
 
-			It("does not contain consul parameters", func() {
-				expectedContent := ExpectedContent(models.InstallerArguments{
-					Username:         "admin",
-					Password:         `"""password"""`,
-					ConsulRequireSSL: false,
-					BbsRequireSsl:    true,
+					It("generates the agent cert", func() {
+						cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_agent.crt"))
+						Expect(err).NotTo(HaveOccurred())
+						Expect(cert).To(BeEquivalentTo("CONSUL_AGENT_CERT"))
+					})
+
+					It("generates the agent key", func() {
+						cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_agent.key"))
+						Expect(err).NotTo(HaveOccurred())
+						Expect(cert).To(BeEquivalentTo("CONSUL_AGENT_KEY"))
+					})
+
+					AssertEncryptKeyIsBase64Encoded := func() {
+						It("generates the encrypt key", func() {
+							cert, err := ioutil.ReadFile(path.Join(outputDir, "consul_encrypt.key"))
+							Expect(err).NotTo(HaveOccurred())
+							Expect(cert).To(BeEquivalentTo("mBevws9TpU1sFPHK/Fq0IQ=="))
+						})
+					}
+
+					Context("when the manifest has base64 encoded key", func() {
+						AssertEncryptKeyIsBase64Encoded()
+					})
+
+					Context("when the manifest is using a passphrase", func() {
+						BeforeEach(func() {
+							manifestYaml = "encrypt_key_passphrase_manifest.yml"
+						})
+
+						AssertEncryptKeyIsBase64Encoded()
+					})
 				})
-				Expect(script).To(Equal(expectedContent))
+
+				Describe("the lines of the batch script", func() {
+					var script string
+
+					JustBeforeEach(func() {
+						content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
+						Expect(err).NotTo(HaveOccurred())
+						script = strings.TrimSpace(string(content))
+					})
+
+					It("contains all the MSI parameters", func() {
+						expectedContent := ExpectedContent(models.InstallerArguments{
+							ConsulRequireSSL: true,
+							BbsRequireSsl:    true,
+							Username:         "admin",
+							Password:         `"""password"""`,
+						})
+						Expect(script).To(Equal(expectedContent))
+					})
+				})
+			})
+
+			Context("when the deployment has no bbs certs", func() {
+				BeforeEach(func() {
+					manifestYaml = "no_bbs_cert_manifest.yml"
+				})
+
+				It("does not contain bbs parameters", func() {
+					expectedContent := ExpectedContent(models.InstallerArguments{
+						ConsulRequireSSL: true,
+						BbsRequireSsl:    false,
+						Username:         "admin",
+						Password:         `"""password"""`,
+					})
+					Expect(script).To(Equal(expectedContent))
+				})
+			})
+
+			Context("when the deployment has no bbs or consul certs", func() {
+				BeforeEach(func() {
+					manifestYaml = "no_consul_or_bbs_cert_manifest.yml"
+				})
+
+				It("does not contain bbs parameters", func() {
+					expectedContent := ExpectedContent(models.InstallerArguments{
+						ConsulRequireSSL: false,
+						BbsRequireSsl:    false,
+						Username:         "admin",
+						Password:         `"""password"""`,
+					})
+					Expect(script).To(Equal(expectedContent))
+				})
+			})
+
+			Context("when the deployment has no consul certs", func() {
+				BeforeEach(func() {
+					manifestYaml = "no_consul_cert_manifest.yml"
+				})
+
+				It("does not contain consul parameters", func() {
+					expectedContent := ExpectedContent(models.InstallerArguments{
+						Username:         "admin",
+						Password:         `"""password"""`,
+						ConsulRequireSSL: false,
+						BbsRequireSsl:    true,
+					})
+					Expect(script).To(Equal(expectedContent))
+				})
+			})
+
+			Context("when the deployment specifies consul properties in the job", func() {
+				BeforeEach(func() {
+					manifestYaml = "job_override_manifest.yml"
+				})
+
+				It("gets the properties from the job", func() {
+					expectedContent := ExpectedContent(models.InstallerArguments{
+						ConsulRequireSSL: true,
+						SyslogHostIP:     "logs2.test.com",
+						BbsRequireSsl:    true,
+						Username:         "admin",
+						Password:         `"""password"""`,
+					})
+					Expect(script).To(Equal(expectedContent))
+				})
 			})
 		})
 
-		Context("when the deployment specifies consul properties in the job", func() {
-			BeforeEach(func() {
-				manifestYaml = "job_override_manifest.yml"
+		Context("with an optional external IP", func() {
+			JustBeforeEach(func() {
+				var session *gexec.Session
+				outputDir, err := ioutil.TempDir("", "XXXXXXX")
+				Expect(err).ToNot(HaveOccurred())
+				session = StartGeneratorWithArgs(
+					"-boshUrl", server.URL(),
+					"-outputDir", outputDir,
+					"-windowsUsername", "admin",
+					"-windowsPassword", "password",
+					"-externalIp", "127.0.0.1",
+				)
+				Eventually(session).Should(gexec.Exit(0))
+				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
+				Expect(err).NotTo(HaveOccurred())
+				script = strings.TrimSpace(string(content))
 			})
 
 			It("gets the properties from the job", func() {
@@ -437,6 +465,7 @@ var _ = Describe("Generate", func() {
 					BbsRequireSsl:    true,
 					Username:         "admin",
 					Password:         `"""password"""`,
+					ExternalIp:       "127.0.0.1",
 				})
 				Expect(script).To(Equal(expectedContent))
 			})
