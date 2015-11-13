@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -33,10 +34,10 @@ const (
   CF_ETCD_CLUSTER=http://{{.EtcdCluster}}:4001 ^
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE={{.Zone}} ^
-  LOGGREGATOR_SHARED_SECRET=secret123 {{ if .ExternalIp }}^
-  EXTERNAL_IP={{.ExternalIp}} {{end}}{{ if .SyslogHostIP }}^
+  LOGGREGATOR_SHARED_SECRET=secret123 ^
+  EXTERNAL_IP={{.ExternalIp}}{{ if .SyslogHostIP }} ^
   SYSLOG_HOST_IP={{.SyslogHostIP}} ^
-  SYSLOG_PORT={{.SyslogPort}} {{ end }}{{if .ConsulRequireSSL }}^
+  SYSLOG_PORT={{.SyslogPort}}{{ end }}{{if .ConsulRequireSSL }} ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
   CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
@@ -44,8 +45,8 @@ const (
 
 msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
   ADMIN_USERNAME={{.Username}} ^
-  ADMIN_PASSWORD={{.Password}}{{ if .ExternalIp }}^
-  EXTERNAL_IP=127.0.0.1 {{end}}{{ if .SyslogHostIP }}^
+  ADMIN_PASSWORD={{.Password}} ^
+  EXTERNAL_IP={{.ExternalIp}}{{ if .SyslogHostIP }} ^
   SYSLOG_HOST_IP={{.SyslogHostIP}} ^
   SYSLOG_PORT={{.SyslogPort}}{{ end }}`
 )
@@ -110,15 +111,23 @@ func main() {
 	}
 
 	args := models.InstallerArguments{
-		Username:   *windowsUsername,
-		Password:   *windowsPassword,
-		ExternalIp: *externalIp,
+		Username: *windowsUsername,
+		Password: *windowsPassword,
 	}
 
 	fillEtcdCluster(&args, manifest)
 	fillSharedSecret(&args, manifest)
 	fillSyslog(&args, manifest)
 	fillConsul(&args, manifest, *outputDir)
+
+	if *externalIp == "" && args.ConsulIPs != "" {
+		consulIp := strings.Split(args.ConsulIPs, ",")[0]
+		conn, err := net.Dial("udp", consulIp+":65530")
+		FailOnError(err)
+		*externalIp = strings.Split(conn.LocalAddr().String(), ":")[0]
+		args.ExternalIp = *externalIp
+	}
+
 	fillBBS(&args, manifest, *outputDir)
 	generateInstallScript(*outputDir, args)
 }
