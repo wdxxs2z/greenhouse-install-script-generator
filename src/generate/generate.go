@@ -34,7 +34,7 @@ const (
   CF_ETCD_CLUSTER=http://{{.EtcdCluster}}:4001 ^
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE={{.Zone}} ^
-  LOGGREGATOR_SHARED_SECRET=secret123 ^
+  LOGGREGATOR_SHARED_SECRET={{.SharedSecret}} ^
   EXTERNAL_IP={{.ExternalIp}}{{ if .SyslogHostIP }} ^
   SYSLOG_HOST_IP={{.SyslogHostIP}} ^
   SYSLOG_PORT={{.SyslogPort}}{{ end }}{{if .ConsulRequireSSL }} ^
