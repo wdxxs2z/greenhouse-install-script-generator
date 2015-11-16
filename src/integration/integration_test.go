@@ -176,14 +176,14 @@ func ExpectedContent(args models.InstallerArguments) string {
   BBS_CA_FILE=%~dp0\bbs_ca.crt ^
   BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
   BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^{{ end }}
-  CONSUL_IPS=consul1.foo.bar ^
+  CONSUL_IPS=127.0.0.1 ^
   CF_ETCD_CLUSTER=http://etcd1.foo.bar:4001 ^
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE=windows ^
-  LOGGREGATOR_SHARED_SECRET=secret123 {{ if .ExternalIp }}^
-  EXTERNAL_IP=127.0.0.1 {{end}}{{ if .SyslogHostIP }}^
+  LOGGREGATOR_SHARED_SECRET=secret123 ^
+  EXTERNAL_IP={{if .ExternalIp }}{{.ExternalIp}}{{else}}127.0.0.1{{end}}{{ if .SyslogHostIP }} ^
   SYSLOG_HOST_IP=logs2.test.com ^
-  SYSLOG_PORT=11111 {{ end }}{{ if .ConsulRequireSSL }}^
+  SYSLOG_PORT=11111{{ end }}{{ if .ConsulRequireSSL }} ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
   CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
   CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
@@ -191,8 +191,8 @@ func ExpectedContent(args models.InstallerArguments) string {
 
 msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
   ADMIN_USERNAME={{.Username}} ^
-  ADMIN_PASSWORD={{.Password}}{{ if .ExternalIp }}^
-  EXTERNAL_IP=127.0.0.1 {{end}}{{ if .SyslogHostIP }}^
+  ADMIN_PASSWORD={{.Password}} ^
+  EXTERNAL_IP={{if .ExternalIp }}{{.ExternalIp}}{{else}}127.0.0.1{{end}}{{ if .SyslogHostIP }} ^
   SYSLOG_HOST_IP=logs2.test.com ^
   SYSLOG_PORT=11111{{ end }}`
 	content = strings.Replace(content, "\n", "\r\n", -1)
@@ -450,7 +450,7 @@ var _ = Describe("Generate", func() {
 					"-outputDir", outputDir,
 					"-windowsUsername", "admin",
 					"-windowsPassword", "password",
-					"-externalIp", "127.0.0.1",
+					"-externalIp", "10.10.3.21",
 				)
 				Eventually(session).Should(gexec.Exit(0))
 				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
@@ -465,7 +465,7 @@ var _ = Describe("Generate", func() {
 					BbsRequireSsl:    true,
 					Username:         "admin",
 					Password:         `"""password"""`,
-					ExternalIp:       "127.0.0.1",
+					ExternalIp:       "10.10.3.21",
 				})
 				Expect(script).To(Equal(expectedContent))
 			})
@@ -595,6 +595,21 @@ var _ = Describe("Generate", func() {
 			It("prints an error message", func() {
 				Eventually(session).Should(gexec.Exit(1))
 				Expect(session.Err).Should(gbytes.Say("Usage of generate:"))
+			})
+		})
+
+		Context("when no consul servers are found in the manifest", func() {
+			var server *ghttp.Server
+			var session *gexec.Session
+
+			BeforeEach(func() {
+				server = CreateServer("no_consul_manifest.yml", DefaultIndexDeployment())
+				session, outputDir = StartGeneratorWithURL(server.URL())
+				Eventually(session).Should(gexec.Exit(1))
+			})
+
+			It("displays an error to the user", func() {
+				Expect(session.Err).Should(gbytes.Say("Could not find any Consul VMs in your BOSH deployment"))
 			})
 		})
 	})

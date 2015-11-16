@@ -9,7 +9,7 @@ properties:
     agent:
       servers:
         lan:
-          - consul1.foo.bar
+          - 127.0.0.1
   loggregator:
     etcd:
       machines:

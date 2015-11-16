@@ -9,7 +9,6 @@ properties:
     agent:
       servers:
         lan:
-          - 127.0.0.1
   loggregator:
     etcd:
       machines:
