@@ -139,10 +139,10 @@ func fillExternalIp(args *models.InstallerArguments, manifest models.Manifest, e
 func fillSharedSecret(args *models.InstallerArguments, manifest models.Manifest) {
 	repJob := firstRepJob(manifest)
 	properties := repJob.Properties
-	if properties.LoggregatorEndpoint == nil {
+	if properties.MetronEndpoint == nil {
 		properties = manifest.Properties
 	}
-	args.SharedSecret = properties.LoggregatorEndpoint.SharedSecret
+	args.SharedSecret = properties.MetronEndpoint.SharedSecret
 }
 
 func fillSyslog(args *models.InstallerArguments, manifest models.Manifest) {

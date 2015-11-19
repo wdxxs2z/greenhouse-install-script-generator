@@ -13,7 +13,7 @@ properties:
     etcd:
       machines:
         - etcd1.foo.bar
-  loggregator_endpoint:
+  metron_endpoint:
     shared_secret: secret123
   diego:
     rep:
