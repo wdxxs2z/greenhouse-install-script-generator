@@ -600,11 +600,10 @@ var _ = Describe("Generate", func() {
 		})
 
 		Context("when the server returns an unauthorized error", func() {
-			var server *ghttp.Server
 			var session *gexec.Session
 
 			BeforeEach(func() {
-				server = Create401Server()
+				server := Create401Server()
 				session, outputDir = StartGeneratorWithURL(server.URL())
 				Eventually(session).Should(gexec.Exit(1))
 			})
