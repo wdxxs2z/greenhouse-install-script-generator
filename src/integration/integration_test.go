@@ -181,7 +181,7 @@ func ExpectedContent(args models.InstallerArguments) string {
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE=windows ^
   LOGGREGATOR_SHARED_SECRET=secret123 ^
-  EXTERNAL_IP={{if .ExternalIp }}{{.ExternalIp}}{{else}}127.0.0.1{{end}}{{ if .SyslogHostIP }} ^
+  MACHINE_IP={{if .MachineIp }}{{.MachineIp}}{{else}}127.0.0.1{{end}}{{ if .SyslogHostIP }} ^
   SYSLOG_HOST_IP=logs2.test.com ^
   SYSLOG_PORT=11111{{ end }}{{ if .ConsulRequireSSL }} ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
@@ -192,7 +192,7 @@ func ExpectedContent(args models.InstallerArguments) string {
 msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
   ADMIN_USERNAME={{.Username}} ^
   ADMIN_PASSWORD={{.Password}} ^
-  EXTERNAL_IP={{if .ExternalIp }}{{.ExternalIp}}{{else}}127.0.0.1{{end}}{{ if .SyslogHostIP }} ^
+  MACHINE_IP={{if .MachineIp }}{{.MachineIp}}{{else}}127.0.0.1{{end}}{{ if .SyslogHostIP }} ^
   SYSLOG_HOST_IP=logs2.test.com ^
   SYSLOG_PORT=11111{{ end }}`
 	content = strings.Replace(content, "\n", "\r\n", -1)
@@ -483,7 +483,7 @@ var _ = Describe("Generate", func() {
 			})
 		})
 
-		Context("with an optional external IP", func() {
+		Context("with an optional machine IP", func() {
 			JustBeforeEach(func() {
 				var session *gexec.Session
 				outputDir, err := ioutil.TempDir("", "XXXXXXX")
@@ -493,7 +493,7 @@ var _ = Describe("Generate", func() {
 					"-outputDir", outputDir,
 					"-windowsUsername", "admin",
 					"-windowsPassword", "password",
-					"-externalIp", "10.10.3.21",
+					"-machineIp", "10.10.3.21",
 				)
 				Eventually(session).Should(gexec.Exit(0))
 				content, err := ioutil.ReadFile(path.Join(outputDir, "install.bat"))
@@ -508,7 +508,7 @@ var _ = Describe("Generate", func() {
 					BbsRequireSsl:    true,
 					Username:         "admin",
 					Password:         `"""password"""`,
-					ExternalIp:       "10.10.3.21",
+					MachineIp:        "10.10.3.21",
 				})
 				Expect(script).To(Equal(expectedContent))
 			})

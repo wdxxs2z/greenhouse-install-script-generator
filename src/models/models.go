@@ -25,7 +25,7 @@ type InstallerArguments struct {
 	SyslogHostIP     string
 	SyslogPort       string
 	BbsRequireSsl    bool
-	ExternalIp       string
+	MachineIp        string
 	MetronPreferTLS  bool
 }
 

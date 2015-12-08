@@ -35,7 +35,7 @@ const (
   STACK=windows2012R2 ^
   REDUNDANCY_ZONE={{.Zone}} ^
   LOGGREGATOR_SHARED_SECRET={{.SharedSecret}} ^
-  EXTERNAL_IP={{.ExternalIp}}{{ if .SyslogHostIP }} ^
+  MACHINE_IP={{.MachineIp}}{{ if .SyslogHostIP }} ^
   SYSLOG_HOST_IP={{.SyslogHostIP}} ^
   SYSLOG_PORT={{.SyslogPort}}{{ end }}{{if .ConsulRequireSSL }} ^
   CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
@@ -49,7 +49,7 @@ const (
 msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
   ADMIN_USERNAME={{.Username}} ^
   ADMIN_PASSWORD={{.Password}} ^
-  EXTERNAL_IP={{.ExternalIp}}{{ if .SyslogHostIP }} ^
+  MACHINE_IP={{.MachineIp}}{{ if .SyslogHostIP }} ^
   SYSLOG_HOST_IP={{.SyslogHostIP}} ^
   SYSLOG_PORT={{.SyslogPort}}{{ end }}`
 )
@@ -59,7 +59,7 @@ func main() {
 	outputDir := flag.String("outputDir", "", "Output directory (/tmp/scripts)")
 	windowsUsername := flag.String("windowsUsername", "", "Windows username")
 	windowsPassword := flag.String("windowsPassword", "", "Windows password")
-	externalIp := flag.String("externalIp", "", "(optional) IP address of this cell")
+	machineIp := flag.String("machineIp", "", "(optional) IP address of this cell")
 
 	flag.Parse()
 	if *boshServerUrl == "" || *outputDir == "" {
@@ -124,20 +124,20 @@ func main() {
 	fillSyslog(&args, manifest)
 	fillConsul(&args, manifest, *outputDir)
 
-	fillExternalIp(&args, manifest, *externalIp)
+	fillMachineIp(&args, manifest, *machineIp)
 
 	fillBBS(&args, manifest, *outputDir)
 	generateInstallScript(*outputDir, args)
 }
 
-func fillExternalIp(args *models.InstallerArguments, manifest models.Manifest, externalIp string) {
-	if externalIp == "" {
+func fillMachineIp(args *models.InstallerArguments, manifest models.Manifest, machineIp string) {
+	if machineIp == "" {
 		consulIp := strings.Split(args.ConsulIPs, ",")[0]
 		conn, err := net.Dial("udp", consulIp+":65530")
 		FailOnError(err)
-		externalIp = strings.Split(conn.LocalAddr().String(), ":")[0]
+		machineIp = strings.Split(conn.LocalAddr().String(), ":")[0]
 	}
-	args.ExternalIp = externalIp
+	args.MachineIp = machineIp
 }
 
 func fillSharedSecret(args *models.InstallerArguments, manifest models.Manifest) {
