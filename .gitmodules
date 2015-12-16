@@ -13,3 +13,9 @@
 [submodule "src/github.com/onsi/gomega"]
 	path = src/github.com/onsi/gomega
 	url = https://github.com/onsi/gomega
+[submodule "src/github.com/josephspurrier/goversioninfo"]
+	path = src/github.com/josephspurrier/goversioninfo
+	url = https://github.com/josephspurrier/goversioninfo
+[submodule "src/github.com/akavel/rsrc"]
+	path = src/github.com/akavel/rsrc
+	url = https://github.com/akavel/rsrc
