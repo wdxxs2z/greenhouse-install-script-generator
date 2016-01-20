@@ -23,6 +23,7 @@ properties:
         client_cert: BBS_CLIENT_CERT
         client_key: BBS_CLIENT_KEY
         require_ssl: true
+        weird_yaml: ! works
 
 jobs:
   - properties:

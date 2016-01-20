@@ -6,9 +6,6 @@ properties:
     agent_key: CONSUL_AGENT_KEY
     encrypt_keys:
       - mBevws9TpU1sFPHK/Fq0IQ==
-    agent:
-      servers:
-        lan:
   loggregator:
     etcd:
       machines:
