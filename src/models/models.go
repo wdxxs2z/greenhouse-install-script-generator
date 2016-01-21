@@ -25,6 +25,17 @@ type InstallerArguments struct {
 	SyslogHostIP     string
 	SyslogPort       string
 	BbsRequireSsl    bool
+	NatsIPs          string
+	NatsUser	 string
+	NatsPassword     string
+	NatsPort	 string
+	ConsulCaCert     string
+	ConsulAgentCert  string
+	ConsulAgentKey   string
+	ConsulEncrypt	 string
+	BBSCACert        string
+	BBSClientCert    string
+	BBSClientKey     string
 }
 
 type ConsulProperties struct {
@@ -60,6 +71,13 @@ type LoggregatorProperties struct {
 	} `yaml:"etcd"`
 }
 
+type NatsProperties struct {
+        User string 		`yaml:user`
+	Password string 	`yaml:password`
+	Port string 		`yaml:port`
+	Machines []string 	`yaml:"machines"`	
+}
+
 type LoggregatorEndpoint struct {
 	SharedSecret string `yaml:"shared_secret"`
 }
@@ -75,6 +93,7 @@ type Properties struct {
 	Loggregator         *LoggregatorProperties `yaml:"loggregator"`
 	LoggregatorEndpoint *LoggregatorEndpoint   `yaml:"loggregator_endpoint"`
 	Syslog              *SyslogProperties      `yaml:"syslog_daemon_config"`
+	Nats		    *NatsProperties        `yaml:"nats"`
 }
 
 type Job struct {

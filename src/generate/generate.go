@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -25,34 +24,74 @@ import (
 )
 
 const (
-	installBatTemplate = `msiexec /passive /norestart /i %~dp0\DiegoWindows.msi ^{{ if .BbsRequireSsl }}
-  BBS_CA_FILE=%~dp0\bbs_ca.crt ^
-  BBS_CLIENT_CERT_FILE=%~dp0\bbs_client.crt ^
-  BBS_CLIENT_KEY_FILE=%~dp0\bbs_client.key ^{{ end }}
-  CONSUL_IPS={{.ConsulIPs}} ^
-  CF_ETCD_CLUSTER=http://{{.EtcdCluster}}:4001 ^
-  STACK=windows2012R2 ^
-  REDUNDANCY_ZONE={{.Zone}} ^
-  LOGGREGATOR_SHARED_SECRET={{.SharedSecret}} {{ if .SyslogHostIP }}^
-  SYSLOG_HOST_IP={{.SyslogHostIP}} ^
-  SYSLOG_PORT={{.SyslogPort}} {{ end }}{{if .ConsulRequireSSL }}^
-  CONSUL_ENCRYPT_FILE=%~dp0\consul_encrypt.key ^
-  CONSUL_CA_FILE=%~dp0\consul_ca.crt ^
-  CONSUL_AGENT_CERT_FILE=%~dp0\consul_agent.crt ^
-  CONSUL_AGENT_KEY_FILE=%~dp0\consul_agent.key{{end}}
+	installShTemplate = `NATS_ADDRESS={{.NatsIPs}}
+NATS_USERNAME={{.NatsUser}}
+NATS_PASSWORD={{.NatsPassword}}
+ETCD_SERVER={{.EtcdCluster}}
+CONSUL_AGENT_ENCRYPT={{.ConsulEncrypt}}
+CONSUL_AGENT_CRT="{{.ConsulAgentCert}}"
+CONSUL_AGENT_KEY="{{.ConsulAgentKey}}"
+CONSUL_CA_CRT="{{.ConsulCaCert}}"
+BBS_CA_CRT="{{.BBSCACert}}"
+BBS_CLIENT_CRT="{{.BBSClientCert}}"
+BBS_CLIENT_KEY="{{.BBSClientKey}}"
+LOGGREGATOR_SHARED_SECRET={{.SharedSecret}}
 
-msiexec /passive /norestart /i %~dp0\GardenWindows.msi ^
-  ADMIN_USERNAME={{.Username}} ^
-  ADMIN_PASSWORD={{.Password}}{{ if .SyslogHostIP }}^
-  SYSLOG_HOST_IP={{.SyslogHostIP}} ^
-  SYSLOG_PORT={{.SyslogPort}}{{ end }}`
+
+echo $CONSUL_AGENT_CRT > /var/vcap/jobs/consul_agent/config/certs/agent.crt
+echo $CONSUL_AGENT_KEY > /var/vcap/jobs/consul_agent/config/certs/agent.key
+echo $CONSUL_CA_CRT > /var/vcap/jobs/consul_agent/config/certs/ca.crt
+echo $BBS_CA_CRT > /var/vcap/jobs/receptor/config/certs/bbs/ca.crt
+echo $BBS_CLIENT_CRT > /var/vcap/jobs/receptor/config/certs/bbs/client.crt
+echo $BBS_CLIENT_KEY > /var/vcap/jobs/receptor/config/certs/bbs/client.key
+
+IP_ADDRESS=${IP_ADDRESS:-` + "`ip addr | grep 'inet .*global' | cut -f 6 -d ' ' | cut -f1 -d '/' | head -n 1`" + `}
+sed -i "s/10.10.130.104/{{.ConsulIPs}}/g" /var/vcap/jobs/consul_agent/config/config.json
+sed -i "s/10.10.30.120/$IP_ADDRESS/g" /var/vcap/jobs/consul_agent/config/config.json
+sed -i "s/10.10.130.104/{{.ConsulIPs}}/g" /var/vcap/jobs/consul_agent/bin/agent_ctl
+sed -i "s/10.10.130.120/$IP_ADDRESS/g" /var/vcap/jobs/consul_agent/bin/agent_ctl
+sed -i "s/10.10.130.120/$IP_ADDRESS/g" /var/vcap/jobs/metron_agent/config/syslog_forwarder.conf
+sed -i "s/10.10.130.105/{{.EtcdCluster}}/g" /var/vcap/jobs/metron_agent/config/metron_agent.json
+sed -i "s/10.10.130.103/$NATS_ADDRESS/g" /var/vcap/jobs/receptor/bin/receptor_ctl
+sed -i "s/-natsUsername=nats/-natsUsername=$NATS_USERNAME/g" /var/vcap/jobs/receptor/bin/receptor_ctl
+sed -i "s/-natsPassword=b6945a6105c1cf5ce66b/-natsPassword=$NATS_PASSWORD/g" /var/vcap/jobs/receptor/bin/receptor_ctl
+sed -i "s/0mTX0RfWX0zxgUVnMimkPw==/$CONSUL_AGENT_ENCRYPT/g" /var/vcap/jobs/consul_agent/config/config.json
+sed -i "s/c12f13df0b192bb19980/$LOGGREGATOR_SHARED_SECRET/g" /var/vcap/jobs/metron_agent/config/metron_agent.json
+
+mkdir -p /var/vcap/sys/log/{consul_agent,metron_agent,monit,receptor,registry}
+mkdir -p /var/vcap/sys/run/{consul_agent,metron_agent,receptor,registry}
+mkdir -p /var/vcap/data/registry
+
+chmod 0700 /var/vcap/bosh/etc/monitrc
+
+# ADD USER
+sudo useradd syslog
+sudo usermod -a -G adm syslog
+sudo useradd -m vcap
+
+# RUNIT
+pushd /tmp
+wget http://smarden.org/runit/runit-2.1.2.tar.gz
+tar -zxf runit-2.1.2.tar.gz
+rm -fr runit-2.1.2.tar.gz
+cd admin/runit-2.1.2
+sudo ./package/install
+sudo cp /usr/local/bin/chpst /sbin/
+rm runit-2.1.2.tar.gz
+popd
+
+# DOCKER
+sudo apt-get update
+sudo apt-get install wget
+wget -qO- https://get.docker.com/ | sh
+sudo usermod -a -G docker vcap
+`
+
 )
 
 func main() {
 	boshServerUrl := flag.String("boshUrl", "", "Bosh URL (https://admin:admin@bosh.example:25555)")
 	outputDir := flag.String("outputDir", "", "Output directory (/tmp/scripts)")
-	windowsUsername := flag.String("windowsUsername", "", "Windows username")
-	windowsPassword := flag.String("windowsPassword", "", "Windows password")
 
 	flag.Parse()
 	if *boshServerUrl == "" || *outputDir == "" {
@@ -67,8 +106,6 @@ func main() {
 			os.MkdirAll(*outputDir, 0755)
 		}
 	}
-
-	validateCredentials(*windowsUsername, *windowsPassword)
 
 	response := NewBoshRequest(*boshServerUrl + "/deployments")
 	defer response.Body.Close()
@@ -105,17 +142,15 @@ func main() {
 		FailOnError(err)
 	}
 
-	args := models.InstallerArguments{
-		Username: *windowsUsername,
-		Password: *windowsPassword,
-	}
+	args := models.InstallerArguments{}
 
+	fillNats(&args, manifest)
 	fillEtcdCluster(&args, manifest)
 	fillSharedSecret(&args, manifest)
 	fillSyslog(&args, manifest)
 	fillConsul(&args, manifest, *outputDir)
 	fillBBS(&args, manifest, *outputDir)
-	generateInstallScript(*outputDir, args)
+	generateInstallShScript(*outputDir, args)
 }
 
 func fillSharedSecret(args *models.InstallerArguments, manifest models.Manifest) {
@@ -125,6 +160,18 @@ func fillSharedSecret(args *models.InstallerArguments, manifest models.Manifest)
 		properties = manifest.Properties
 	}
 	args.SharedSecret = properties.LoggregatorEndpoint.SharedSecret
+}
+
+func fillNats(args *models.InstallerArguments, manifest models.Manifest) {
+	repJob := firstRepJob(manifest)
+	properties := repJob.Properties
+	if properties.Nats == nil {
+		properties = manifest.Properties	
+	}
+	args.NatsIPs = strings.Join(properties.Nats.Machines, ",")
+	args.NatsUser = properties.Nats.User
+	args.NatsPassword = properties.Nats.Password
+	args.NatsPort = properties.Nats.Port
 }
 
 func fillSyslog(args *models.InstallerArguments, manifest models.Manifest) {
@@ -156,8 +203,11 @@ func fillBBS(args *models.InstallerArguments, manifest models.Manifest, outputDi
 	// missing requireSSL implies true
 	if requireSSL == nil || *requireSSL {
 		args.BbsRequireSsl = true
-		extractBbsKeyAndCert(properties, outputDir)
 	}
+
+	args.BBSCACert = properties.Diego.Rep.BBS.CACert
+	args.BBSClientCert = properties.Diego.Rep.BBS.ClientCert
+	args.BBSClientKey = properties.Diego.Rep.BBS.ClientKey
 }
 
 func stringToEncryptKey(str string) string {
@@ -181,12 +231,17 @@ func fillConsul(args *models.InstallerArguments, manifest models.Manifest, outpu
 	requireSSL := properties.Consul.RequireSSL
 	if requireSSL == nil || *requireSSL {
 		args.ConsulRequireSSL = true
-		extractConsulKeyAndCert(properties, outputDir)
 	}
 
 	consuls := properties.Consul.Agent.Servers.Lan
 
 	args.ConsulIPs = strings.Join(consuls, ",")
+	args.ConsulCaCert = properties.Consul.CACert
+	args.ConsulAgentCert = properties.Consul.AgentCert
+	args.ConsulAgentKey = properties.Consul.AgentKey
+
+	encryptKey := stringToEncryptKey(properties.Consul.EncryptKeys[0])
+	args.ConsulEncrypt = encryptKey
 }
 
 func fillEtcdCluster(args *models.InstallerArguments, manifest models.Manifest) {
@@ -211,47 +266,17 @@ func firstRepJob(manifest models.Manifest) models.Job {
 	panic("no rep jobs found")
 }
 
-func extractConsulKeyAndCert(properties *models.Properties, outputDir string) {
-	encryptKey := stringToEncryptKey(properties.Consul.EncryptKeys[0])
-
-	for key, filename := range map[string]string{
-		properties.Consul.AgentCert: "consul_agent.crt",
-		properties.Consul.AgentKey:  "consul_agent.key",
-		properties.Consul.CACert:    "consul_ca.crt",
-		encryptKey:                  "consul_encrypt.key",
-	} {
-		err := ioutil.WriteFile(path.Join(outputDir, filename), []byte(key), 0644)
-		if err != nil {
-			FailOnError(err)
-		}
-	}
-}
-
-func extractBbsKeyAndCert(properties *models.Properties, outputDir string) {
-	for key, filename := range map[string]string{
-		properties.Diego.Rep.BBS.ClientCert: "bbs_client.crt",
-		properties.Diego.Rep.BBS.ClientKey:  "bbs_client.key",
-		properties.Diego.Rep.BBS.CACert:     "bbs_ca.crt",
-	} {
-		err := ioutil.WriteFile(path.Join(outputDir, filename), []byte(key), 0644)
-		if err != nil {
-			FailOnError(err)
-		}
-	}
-}
-
 func FailOnError(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
 
-func generateInstallScript(outputDir string, args models.InstallerArguments) {
-	content := strings.Replace(installBatTemplate, "\n", "\r\n", -1)
+func generateInstallShScript(outputDir string, args models.InstallerArguments) {
+	content := strings.Replace(installShTemplate, "\n", "\r\n", -1)
 	temp := template.Must(template.New("").Parse(content))
-	args.Zone = "windows"
-	filename := "install.bat"
-	file, err := os.OpenFile(path.Join(outputDir, filename), os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
+	filename := "install.sh"
+	file, err := os.OpenFile(path.Join(outputDir, filename), os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0755)
 	if err != nil {
 		log.Fatal(err)
 	}
