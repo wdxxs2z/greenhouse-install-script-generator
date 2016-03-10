@@ -62,7 +62,20 @@ mkdir -p /var/vcap/sys/log/{consul_agent,metron_agent,monit,receptor,registry}
 mkdir -p /var/vcap/sys/run/{consul_agent,metron_agent,receptor,registry}
 mkdir -p /var/vcap/data/registry
 
+chown root:root /var/vcap/bosh/bin/monit
+chown root:root /var/vcap/bosh/etc/monitrc
 chmod 0700 /var/vcap/bosh/etc/monitrc
+
+chmod +x /var/vcap/packages/confab/bin/*
+chmod +x /var/vcap/packages/consul/bin/*
+chmod -R +x /var/vcap/packages/metron_agent/*
+chmod +x /var/vcap/packages/receptor/bin/*
+chmod +x /var/vcap/packages/registry/*
+
+chmod +x /var/vcap/jobs/consul_agent/bin/*
+chmod +x /var/vcap/jobs/metron_agent/bin/*
+chmod +x /var/vcap/jobs/receptor/bin/*
+chmod +x /var/vcap/jobs/registry/bin/*
 
 # ADD USER
 sudo useradd syslog
@@ -273,8 +286,9 @@ func FailOnError(err error) {
 }
 
 func generateInstallShScript(outputDir string, args models.InstallerArguments) {
-	content := strings.Replace(installShTemplate, "\n", "\r\n", -1)
-	temp := template.Must(template.New("").Parse(content))
+	//This is windows line, so removed.
+        //content := strings.Replace(installShTemplate, "\n", "\r\n", -1)
+	temp := template.Must(template.New("").Parse(installShTemplate))
 	filename := "install.sh"
 	file, err := os.OpenFile(path.Join(outputDir, filename), os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0755)
 	if err != nil {
